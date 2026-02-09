@@ -25,10 +25,20 @@ from .cve_fetcher import NVDFetcher
 # --- INITIALIZE ENVIRONMENT ---
 load_dotenv() # Load the .env file
 
-# --- MONGODB CONNECTION ---
-client = MongoClient('mongodb://localhost:27017/')
-db = client['ansas_db']
-scans_collection = db['scans']
+# --- MONGODB CLOUD CONNECTION ---
+mongo_uri = os.getenv('MONGO_URI')
+
+# 1. Connect to the Cluster
+try:
+    client = MongoClient(mongo_uri)
+    # 2. Select the Database
+    db = client['ansas_db']
+    # 3. Select the Collection
+    scans_collection = db['scans']
+    print(f"✅ Successfully connected to MongoDB Atlas")
+except Exception as e:
+    print(f"❌ MongoDB Connection Error: {e}")
+
 
 # --- 1. AUTHENTICATION VIEWS (Open to Everyone) ---
 
@@ -104,7 +114,7 @@ class GenerateReportView(APIView):
         p.drawString(50, y, f"Total Assets Scanned: {scan.get('asset_count', 0)}")
         y -= 30
 
-        # C. Detailed Findings (THIS WAS MISSING IN THE SHORT VERSION)
+        # C. Detailed Findings
         p.setFont("Helvetica-Bold", 14)
         p.drawString(50, y, "Detailed Findings")
         y -= 25
