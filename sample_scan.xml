@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<nmaprun scanner="nmap" args="nmap -sV -oX sample.xml 192.168.1.10" start="1678000000">
+    <host>
+        <address addr="192.168.1.10" addrtype="ipv4"/>
+        <hostnames>
+            <hostname name="web-server-01.local" type="user"/>
+        </hostnames>
+        <ports>
+            <port protocol="tcp" portid="22">
+                <state state="open" reason="syn-ack"/>
+                <service name="ssh" product="OpenSSH" version="7.6p1" method="probed"/>
+            </port>
+            <port protocol="tcp" portid="80">
+                <state state="open" reason="syn-ack"/>
+                <service name="http" product="Apache httpd" version="2.4.41" method="probed"/>
+            </port>
+            <port protocol="tcp" portid="3306">
+                <state state="open" reason="syn-ack"/>
+                <service name="mysql" product="MySQL" version="5.7.33" method="probed"/>
+            </port>
+        </ports>
+    </host>
+    <host>
+        <address addr="192.168.1.15" addrtype="ipv4"/>
+        <ports>
+            <port protocol="tcp" portid="443">
+                <state state="open" reason="syn-ack"/>
+                <service name="https" product="nginx" version="1.18.0" method="probed"/>
+            </port>
+        </ports>
+    </host>
+</nmaprun>
