@@ -1,210 +1,295 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid 
 } from 'recharts';
-import { Upload, Activity, AlertTriangle, Shield, Server } from 'lucide-react';
+import { 
+  Upload, Activity, AlertTriangle, Shield, Server, 
+  FileText, CheckCircle, Loader, Search 
+} from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
+  const [isHovering, setIsHovering] = useState(false);
 
-  // --- HELPER: Safely Extract the List ---
+  // --- 1. DATA PROCESSING (Same logic, just safer) ---
   const getHosts = () => {
     if (!data) return [];
-    
-    // CASE 1: Data is already a list (Perfect)
     if (Array.isArray(data)) return data;
-    
-    // CASE 2: Data is an object wrapping the list (e.g. { results: [...] })
     if (data.results && Array.isArray(data.results)) return data.results;
     if (data.scan_data && Array.isArray(data.scan_data)) return data.scan_data;
-
-    // CASE 3: Unknown format - Log it and return empty to prevent crash
-    console.warn("Dashboard received unknown data format:", data);
     return [];
   };
 
   const hosts = getHosts();
 
-  // --- HELPER: Process Data for Charts ---
   const processCharts = () => {
-    if (hosts.length === 0) return { pieData: [], barData: [] };
+    if (hosts.length === 0) return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
 
-    let critical = 0, high = 0, medium = 0, low = 0;
+    let critical = 0, high = 0, medium = 0, low = 0, total = 0;
     const portCounts = {};
 
     hosts.forEach(host => {
-      // Ensure 'services' exists before looping
       if (host.services && Array.isArray(host.services)) {
         host.services.forEach(svc => {
-          // 1. Severity Counts
+          const port = svc.port;
+          portCounts[port] = (portCounts[port] || 0) + 1;
+          
           if (svc.vulnerabilities) {
             svc.vulnerabilities.forEach(v => {
+              total++;
               if (v.cvss_score >= 9.0) critical++;
               else if (v.cvss_score >= 7.0) high++;
               else if (v.cvss_score >= 4.0) medium++;
               else low++;
             });
           }
-          // 2. Port Counts
-          const port = svc.port;
-          portCounts[port] = (portCounts[port] || 0) + 1;
         });
       }
     });
 
     const pieData = [
-      { name: 'Critical', value: critical, color: '#c0392b' }, 
-      { name: 'High', value: high, color: '#e67e22' },     
-      { name: 'Medium', value: medium, color: '#f1c40f' }, 
-      { name: 'Low', value: low, color: '#27ae60' },      
+      { name: 'Critical', value: critical, color: '#ef4444' }, // Red
+      { name: 'High', value: high, color: '#f97316' },     // Orange
+      { name: 'Medium', value: medium, color: '#eab308' }, // Yellow
+      { name: 'Low', value: low, color: '#22c55e' },      // Green
     ].filter(i => i.value > 0);
 
     const barData = Object.keys(portCounts).map(port => ({
       name: `Port ${port}`,
       count: portCounts[port]
-    })).slice(0, 5); 
+    })).sort((a, b) => b.count - a.count).slice(0, 5);
 
-    return { pieData, barData };
+    return { pieData, barData, totalVulns: total, criticalVulns: critical };
   };
 
-  const { pieData, barData } = processCharts();
+  const { pieData, barData, totalVulns, criticalVulns } = processCharts();
+
+  // --- 2. UI HELPERS ---
+  const handleDragOver = (e) => { e.preventDefault(); setIsHovering(true); };
+  const handleDragLeave = () => setIsHovering(false);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsHovering(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFile(e.dataTransfer.files[0]);
+    }
+  };
 
   return (
-    <div style={{ padding: '30px', animation: 'fadeIn 0.5s' }}>
+    <div style={styles.container}>
       
-      {/* HEADER */}
-      <div style={{ marginBottom: '30px' }}>
-        <h2 style={{ color: '#2c3e50', margin: 0, display: 'flex', alignItems: 'center' }}>
-          <Activity style={{ marginRight: '10px', color: '#3498db' }} /> 
-          Security Operations Center
-        </h2>
-        <p style={{ color: '#7f8c8d', marginLeft: '35px' }}>Real-time Vulnerability Assessment Dashboard</p>
-      </div>
-
-      {/* UPLOAD AREA */}
-      <div style={{ background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', textAlign: 'center', marginBottom: '30px' }}>
-        <div style={{ border: '2px dashed #3498db', padding: '40px', borderRadius: '10px', backgroundColor: '#f9fbfd' }}>
-          <Upload size={48} color="#3498db" style={{ marginBottom: '15px' }} />
-          <h3 style={{ color: '#2c3e50' }}>Upload Nmap XML Scan</h3>
-          
-          <input 
-            type="file" 
-            accept=".xml" 
-            onChange={(e) => setFile(e.target.files[0])} 
-            style={{ display: 'block', margin: '20px auto' }} 
-          />
-          
-          <button 
-            onClick={handleUpload} 
-            disabled={loading}
-            style={{ 
-              backgroundColor: loading ? '#95a5a6' : '#2c3e50', 
-              color: 'white', padding: '12px 30px', border: 'none', borderRadius: '5px', fontSize: '16px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold', transition: '0.3s'
-            }}
-          >
-            {loading ? "Analyzing Target..." : "Run Security Analysis"}
-          </button>
-          
-          {error && <div style={{ marginTop: '15px', color: '#c0392b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle size={16} style={{marginRight:5}}/> {error}</div>}
+      {/* HEADER SECTION */}
+      <div style={styles.header}>
+        <div>
+          <h1 style={styles.title}>
+            <Shield size={32} style={{ marginRight: 12, color: '#2563eb' }} />
+            ANSAS <span style={{ fontWeight: 300, color: '#64748b' }}>Security Console</span>
+          </h1>
+          <p style={styles.subtitle}>Automated Network Security Assessment System</p>
+        </div>
+        <div style={styles.statusBadge}>
+          <Activity size={16} style={{ marginRight: 6 }} />
+          System Active
         </div>
       </div>
 
-      {/* ANALYTICS SECTION */}
+      {/* UPLOAD SECTION (The "Hero" Feature) */}
+      <div style={styles.uploadSection}>
+        {!loading ? (
+          <div 
+            style={{ 
+              ...styles.dropZone, 
+              borderColor: isHovering ? '#2563eb' : '#e2e8f0',
+              backgroundColor: isHovering ? '#eff6ff' : '#f8fafc' 
+            }}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <input 
+              type="file" 
+              id="fileInput"
+              accept=".xml" 
+              onChange={(e) => setFile(e.target.files[0])} 
+              style={{ display: 'none' }} 
+            />
+            
+            <div style={{ textAlign: 'center' }}>
+              {file ? (
+                <div style={styles.fileSelected}>
+                  <FileText size={48} color="#2563eb" />
+                  <p style={styles.fileName}>{file.name}</p>
+                  <button onClick={handleUpload} style={styles.analyzeBtn}>
+                    <Search size={18} style={{ marginRight: 8 }} />
+                    Run Security Audit
+                  </button>
+                  <p style={{marginTop: 10, fontSize: '0.8rem', color: '#64748b', cursor: 'pointer'}} onClick={() => setFile(null)}>Change File</p>
+                </div>
+              ) : (
+                <label htmlFor="fileInput" style={{ cursor: 'pointer' }}>
+                  <div style={styles.uploadIconWrapper}>
+                    <Upload size={32} color="#64748b" />
+                  </div>
+                  <h3 style={styles.uploadTitle}>Upload Nmap Scan</h3>
+                  <p style={styles.uploadText}>Drag & drop your XML file here, or click to browse</p>
+                </label>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={styles.loadingState}>
+            <Loader size={48} className="spin-animation" color="#2563eb" />
+            <h3 style={{ marginTop: 20, color: '#1e293b' }}>Analyzing Network Topology...</h3>
+            <p style={{ color: '#64748b' }}>Parsing vulnerabilities and mapping assets</p>
+          </div>
+        )}
+        
+        {error && (
+          <div style={styles.errorBanner}>
+            <AlertTriangle size={20} />
+            <span style={{ marginLeft: 10 }}>{error}</span>
+          </div>
+        )}
+      </div>
+
+      {/* RESULTS DASHBOARD */}
       {hosts.length > 0 && (
-        <>
+        <div style={styles.dashboardGrid}>
+          
           {/* KPI CARDS */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-            <div style={styles.card}>
-              <Server size={30} color="#3498db" />
-              <h3>{hosts.length}</h3>
-              <p>Assets Discovered</p>
-            </div>
-            <div style={styles.card}>
-              <AlertTriangle size={30} color="#e74c3c" />
-              <h3>{pieData.reduce((a, b) => a + b.value, 0)}</h3>
-              <p>Total Vulnerabilities</p>
-            </div>
-            <div style={styles.card}>
-              <Shield size={30} color="#27ae60" />
-              <h3>Secure</h3>
-              <p>System Status</p>
-            </div>
+          <div style={styles.statsRow}>
+            <StatCard icon={Server} color="#3b82f6" label="Total Assets" value={hosts.length} />
+            <StatCard icon={AlertTriangle} color="#ef4444" label="Critical Issues" value={criticalVulns} />
+            <StatCard icon={Activity} color="#f59e0b" label="Total Vulns" value={totalVulns} />
+            <StatCard icon={CheckCircle} color="#10b981" label="Secure Hosts" value={hosts.length - Math.min(hosts.length, criticalVulns)} />
           </div>
 
           {/* CHARTS ROW */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
-            
-            {/* Pie Chart */}
-            <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-              <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Severity Distribution</h3>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Bar Chart */}
-            <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-              <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Top Vulnerable Ports</h3>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#3498db" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Detailed Findings List */}
-            <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxHeight: '380px', overflowY: 'auto', gridColumn: 'span 2' }}>
-              <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Live Findings Feed</h3>
-              {hosts.map((host, idx) => (
-                <div key={idx} style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #f0f0f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
-                    <Server size={16} color="#7f8c8d" style={{ marginRight: '8px' }} />
-                    <strong style={{ color: '#34495e' }}>{host.ip_address}</strong>
-                  </div>
-                  <ul style={{ paddingLeft: '28px', marginTop: '5px', margin: 0 }}>
-                    {host.services && host.services.map((svc, i) => (
-                      <li key={i} style={{ color: '#7f8c8d', fontSize: '14px', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 'bold' }}>Port {svc.port}</span>: {svc.product} 
-                        {svc.vuln_count > 0 ? (
-                           <span style={{ color: '#e74c3c', marginLeft: '10px', fontWeight: 'bold' }}>⚠️ {svc.vuln_count} CVEs</span>
-                        ) : (
-                           <span style={{ color: '#27ae60', marginLeft: '10px' }}>✅ Safe</span>
-                        )}
-                      </li>
+          <div style={styles.chartContainer}>
+            <div style={styles.chartCard}>
+              <h3 style={styles.cardTitle}>Vulnerability Severity</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
-                  </ul>
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36}/>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={styles.chartCard}>
+              <h3 style={styles.cardTitle}>Top Risky Ports</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={barData} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
+                  <Tooltip cursor={{fill: '#f1f5f9'}} />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* ASSET LIST */}
+          <div style={styles.tableCard}>
+            <h3 style={styles.cardTitle}>Detailed Asset Intelligence</h3>
+            <div style={styles.tableWrapper}>
+              {hosts.map((host, idx) => (
+                <div key={idx} style={styles.hostRow}>
+                  <div style={styles.hostHeader}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={styles.ipBadge}>{host.ip_address}</div>
+                      <span style={styles.osText}>{host.os_name || "Unknown OS"}</span>
+                    </div>
+                    <div style={styles.vulnCountBadge}>
+                      {host.services ? host.services.length : 0} Services
+                    </div>
+                  </div>
+                  
+                  <div style={styles.serviceGrid}>
+                    {host.services && host.services.map((svc, i) => (
+                      <div key={i} style={styles.serviceTag}>
+                        <span style={{fontWeight: 600, marginRight: 5}}>{svc.port}/{svc.protocol}</span>
+                        <span style={{color: '#64748b'}}>{svc.product}</span>
+                        {svc.vuln_count > 0 && <span style={styles.miniAlert}>⚠️ {svc.vuln_count}</span>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
-        </>
+
+        </div>
       )}
+      
+      {/* CSS ANIMATION FOR LOADER */}
+      <style>{`
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .spin-animation { animation: spin 2s linear infinite; }
+      `}</style>
     </div>
   );
 };
 
+// --- SUB-COMPONENTS ---
+const StatCard = ({ icon: Icon, color, label, value }) => (
+  <div style={styles.statCard}>
+    <div style={{ ...styles.iconBox, backgroundColor: `${color}20`, color: color }}>
+      <Icon size={24} />
+    </div>
+    <div>
+      <h4 style={styles.statValue}>{value}</h4>
+      <p style={styles.statLabel}>{label}</p>
+    </div>
+  </div>
+);
+
+// --- STYLES OBJECT ---
 const styles = {
-  card: {
-    background: 'white', padding: '25px', borderRadius: '10px',
-    textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-  }
+  container: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px', fontFamily: "'Inter', sans-serif", color: '#1e293b' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' },
+  title: { fontSize: '1.8rem', fontWeight: '800', display: 'flex', alignItems: 'center', margin: 0, color: '#0f172a' },
+  subtitle: { margin: '5px 0 0 45px', color: '#64748b', fontSize: '0.9rem' },
+  statusBadge: { display: 'flex', alignItems: 'center', padding: '6px 12px', background: '#dcfce7', color: '#166534', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' },
+  
+  uploadSection: { marginBottom: '50px' },
+  dropZone: { border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '60px', transition: 'all 0.2s ease', minHeight: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+  uploadIconWrapper: { background: '#fff', padding: '20px', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', marginBottom: '20px', display: 'inline-block' },
+  uploadTitle: { fontSize: '1.25rem', fontWeight: '700', margin: '0 0 10px 0' },
+  uploadText: { color: '#64748b', margin: 0 },
+  fileSelected: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
+  fileName: { fontSize: '1.1rem', fontWeight: '600', margin: '15px 0' },
+  analyzeBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 32px', borderRadius: '8px', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' },
+  loadingState: { textAlign: 'center', padding: '40px' },
+  errorBanner: { background: '#fee2e2', color: '#991b1b', padding: '16px', borderRadius: '8px', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500' },
+
+  dashboardGrid: { animation: 'fadeIn 0.5s ease-in' },
+  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' },
+  statCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', border: '1px solid #f1f5f9' },
+  iconBox: { width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '16px' },
+  statValue: { fontSize: '1.5rem', fontWeight: '800', margin: 0, lineHeight: 1 },
+  statLabel: { color: '#64748b', fontSize: '0.875rem', margin: '4px 0 0 0', fontWeight: '500' },
+
+  chartContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '30px' },
+  chartCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
+  cardTitle: { fontSize: '1.1rem', fontWeight: '700', marginBottom: '20px', color: '#0f172a' },
+
+  tableCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
+  tableWrapper: { maxHeight: '500px', overflowY: 'auto' },
+  hostRow: { borderBottom: '1px solid #f1f5f9', padding: '16px 0' },
+  hostHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' },
+  ipBadge: { fontFamily: 'monospace', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontWeight: '700', color: '#334155', marginRight: '10px' },
+  osText: { color: '#64748b', fontSize: '0.9rem' },
+  vulnCountBadge: { fontSize: '0.8rem', fontWeight: '600', color: '#64748b' },
+  serviceGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
+  serviceTag: { fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center' },
+  miniAlert: { marginLeft: '6px', color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' }
 };
 
 export default Dashboard;
