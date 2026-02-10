@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard';
 import History from './pages/History';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
-import API_BASE_URL from './config'; // <--- IMPORT THE CLOUD CONFIG
+import API_BASE_URL from './config';
 import './App.css';
 
 function App() {
@@ -16,16 +16,29 @@ function App() {
   const [password, setPassword] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   
-  // Data State (Shared across pages)
+  // Data State
   const [file, setFile] = useState(null);
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // --- API FUNCTIONS (Defined before useEffect to avoid hoisting issues) ---
+  const fetchHistory = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/upload-scan/`, {
+        headers: { 'Authorization': `Token ${token}` }
+      });
+      setHistory(response.data);
+    } catch (err) {
+      console.error("Failed to load history", err);
+    }
+  };
+
   // --- EFFECT: Load History if Token Exists ---
   useEffect(() => {
     if (token) fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // --- AUTH FUNCTIONS ---
@@ -35,7 +48,6 @@ function App() {
     const payload = { username, password };
 
     try {
-      // UPDATED: Use API_BASE_URL
       const response = await axios.post(`${API_BASE_URL}/api/${endpoint}`, payload);
       const newToken = response.data.token;
       setToken(newToken);
@@ -53,19 +65,6 @@ function App() {
     setHistory([]);
   };
 
-  // --- API FUNCTIONS ---
-  const fetchHistory = async () => {
-    try {
-      // UPDATED: Use API_BASE_URL
-      const response = await axios.get(`${API_BASE_URL}/api/upload-scan/`, {
-        headers: { 'Authorization': `Token ${token}` }
-      });
-      setHistory(response.data);
-    } catch (err) {
-      console.error("Failed to load history", err);
-    }
-  };
-
   const handleUpload = async () => {
     if (!file) { setError("Please select a file first."); return; }
     const formData = new FormData();
@@ -73,7 +72,6 @@ function App() {
     setLoading(true);
 
     try {
-      // UPDATED: Use API_BASE_URL
       const response = await axios.post(`${API_BASE_URL}/api/upload-scan/`, formData, {
         headers: { 'Content-Type': 'multipart/form-data', 'Authorization': `Token ${token}` },
       });
@@ -90,7 +88,6 @@ function App() {
 
   const handleDownload = async (scanId, filename) => {
     try {
-      // UPDATED: Use API_BASE_URL
       const response = await axios.get(`${API_BASE_URL}/api/report/${scanId}/`, {
         headers: { 'Authorization': `Token ${token}` },
         responseType: 'blob',
@@ -125,41 +122,17 @@ function App() {
     );
   }
 
-  // --- RENDER: MAIN APP (WITH SIDEBAR) ---
+  // --- RENDER: MAIN APP ---
   return (
     <Router>
       <div style={{ display: 'flex' }}>
-        {/* 1. SIDEBAR (Fixed Left) */}
         <Sidebar onLogout={handleLogout} />
-
-        {/* 2. MAIN CONTENT (Right Side) */}
         <div style={{ marginLeft: '240px', width: '100%', padding: '0', backgroundColor: '#ecf0f1', minHeight: '100vh' }}>
           <Routes>
-            <Route path="/" element={
-              <Dashboard 
-                file={file} 
-                setFile={setFile} 
-                handleUpload={handleUpload} 
-                loading={loading} 
-                error={error} 
-                data={data} 
-              />
-            } />
-            <Route path="/history" element={
-              <History 
-                history={history} 
-                handleDownload={handleDownload} 
-              />
-            } />
-            <Route path="/reports" element={
-              <Reports 
-                history={history} 
-                handleDownload={handleDownload} 
-              />
-            } />
+            <Route path="/" element={<Dashboard file={file} setFile={setFile} handleUpload={handleUpload} loading={loading} error={error} data={data} />} />
+            <Route path="/history" element={<History history={history} handleDownload={handleDownload} />} />
+            <Route path="/reports" element={<Reports history={history} handleDownload={handleDownload} />} />
             <Route path="/settings" element={<Settings />} />
-            
-            {/* Redirect unknown routes to Dashboard */}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </div>
