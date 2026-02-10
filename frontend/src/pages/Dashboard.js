@@ -7,41 +7,62 @@ import { Upload, Activity, AlertTriangle, Shield, Server } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
 
+  // --- HELPER: Safely Extract the List ---
+  const getHosts = () => {
+    if (!data) return [];
+    
+    // CASE 1: Data is already a list (Perfect)
+    if (Array.isArray(data)) return data;
+    
+    // CASE 2: Data is an object wrapping the list (e.g. { results: [...] })
+    if (data.results && Array.isArray(data.results)) return data.results;
+    if (data.scan_data && Array.isArray(data.scan_data)) return data.scan_data;
+
+    // CASE 3: Unknown format - Log it and return empty to prevent crash
+    console.warn("Dashboard received unknown data format:", data);
+    return [];
+  };
+
+  const hosts = getHosts();
+
   // --- HELPER: Process Data for Charts ---
   const processCharts = () => {
-    if (!data) return { pieData: [], barData: [] };
+    if (hosts.length === 0) return { pieData: [], barData: [] };
 
     let critical = 0, high = 0, medium = 0, low = 0;
     const portCounts = {};
 
-    data.forEach(host => {
-      host.services.forEach(svc => {
-        // 1. Severity Counts
-        if (svc.vulnerabilities) {
-          svc.vulnerabilities.forEach(v => {
-            if (v.cvss_score >= 9.0) critical++;
-            else if (v.cvss_score >= 7.0) high++;
-            else if (v.cvss_score >= 4.0) medium++;
-            else low++;
-          });
-        }
-        // 2. Port Counts (for Bar Chart)
-        const port = svc.port;
-        portCounts[port] = (portCounts[port] || 0) + 1;
-      });
+    hosts.forEach(host => {
+      // Ensure 'services' exists before looping
+      if (host.services && Array.isArray(host.services)) {
+        host.services.forEach(svc => {
+          // 1. Severity Counts
+          if (svc.vulnerabilities) {
+            svc.vulnerabilities.forEach(v => {
+              if (v.cvss_score >= 9.0) critical++;
+              else if (v.cvss_score >= 7.0) high++;
+              else if (v.cvss_score >= 4.0) medium++;
+              else low++;
+            });
+          }
+          // 2. Port Counts
+          const port = svc.port;
+          portCounts[port] = (portCounts[port] || 0) + 1;
+        });
+      }
     });
 
     const pieData = [
-      { name: 'Critical', value: critical, color: '#c0392b' }, // Dark Red
-      { name: 'High', value: high, color: '#e67e22' },     // Orange
-      { name: 'Medium', value: medium, color: '#f1c40f' }, // Yellow
-      { name: 'Low', value: low, color: '#27ae60' },      // Green
+      { name: 'Critical', value: critical, color: '#c0392b' }, 
+      { name: 'High', value: high, color: '#e67e22' },     
+      { name: 'Medium', value: medium, color: '#f1c40f' }, 
+      { name: 'Low', value: low, color: '#27ae60' },      
     ].filter(i => i.value > 0);
 
     const barData = Object.keys(portCounts).map(port => ({
       name: `Port ${port}`,
       count: portCounts[port]
-    })).slice(0, 5); // Top 5 ports
+    })).slice(0, 5); 
 
     return { pieData, barData };
   };
@@ -89,13 +110,13 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
       </div>
 
       {/* ANALYTICS SECTION */}
-      {data && (
+      {hosts.length > 0 && (
         <>
           {/* KPI CARDS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
             <div style={styles.card}>
               <Server size={30} color="#3498db" />
-              <h3>{data.length}</h3>
+              <h3>{hosts.length}</h3>
               <p>Assets Discovered</p>
             </div>
             <div style={styles.card}>
@@ -113,7 +134,7 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
           {/* CHARTS ROW */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
             
-            {/* Pie Chart - Severity */}
+            {/* Pie Chart */}
             <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
               <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Severity Distribution</h3>
               <div style={{ height: '300px' }}>
@@ -131,7 +152,7 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
               </div>
             </div>
 
-            {/* Bar Chart - Top Ports (THIS WAS MISSING BEFORE) */}
+            {/* Bar Chart */}
             <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
               <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Top Vulnerable Ports</h3>
               <div style={{ height: '300px' }}>
@@ -150,14 +171,14 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
             {/* Detailed Findings List */}
             <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxHeight: '380px', overflowY: 'auto', gridColumn: 'span 2' }}>
               <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Live Findings Feed</h3>
-              {data.map((host, idx) => (
+              {hosts.map((host, idx) => (
                 <div key={idx} style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #f0f0f0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
                     <Server size={16} color="#7f8c8d" style={{ marginRight: '8px' }} />
                     <strong style={{ color: '#34495e' }}>{host.ip_address}</strong>
                   </div>
                   <ul style={{ paddingLeft: '28px', marginTop: '5px', margin: 0 }}>
-                    {host.services.map((svc, i) => (
+                    {host.services && host.services.map((svc, i) => (
                       <li key={i} style={{ color: '#7f8c8d', fontSize: '14px', marginBottom: '4px' }}>
                         <span style={{ fontWeight: 'bold' }}>Port {svc.port}</span>: {svc.product} 
                         {svc.vuln_count > 0 ? (
