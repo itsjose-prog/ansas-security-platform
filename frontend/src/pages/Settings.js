@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Shield, Server, Globe } from 'lucide-react';
+import { User, Server, Globe } from 'lucide-react';
 
 const Settings = () => {
   // Static data for now - in V2 we can fetch this from an API

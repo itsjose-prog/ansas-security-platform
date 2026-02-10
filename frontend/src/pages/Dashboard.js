@@ -3,7 +3,7 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid 
 } from 'recharts';
-import { Upload, Activity, AlertTriangle, Shield, Server, CheckCircle } from 'lucide-react';
+import { Upload, Activity, AlertTriangle, Shield, Server } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
 
@@ -65,7 +65,6 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
         <div style={{ border: '2px dashed #3498db', padding: '40px', borderRadius: '10px', backgroundColor: '#f9fbfd' }}>
           <Upload size={48} color="#3498db" style={{ marginBottom: '15px' }} />
           <h3 style={{ color: '#2c3e50' }}>Upload Nmap XML Scan</h3>
-          <p style={{ color: '#95a5a6' }}>Drag and drop your file here or click to browse</p>
           
           <input 
             type="file" 
@@ -114,7 +113,7 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
           {/* CHARTS ROW */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
             
-            {/* Pie Chart */}
+            {/* Pie Chart - Severity */}
             <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
               <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Severity Distribution</h3>
               <div style={{ height: '300px' }}>
@@ -132,8 +131,24 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
               </div>
             </div>
 
+            {/* Bar Chart - Top Ports (THIS WAS MISSING BEFORE) */}
+            <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Top Vulnerable Ports</h3>
+              <div style={{ height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#3498db" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
             {/* Detailed Findings List */}
-            <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxHeight: '380px', overflowY: 'auto' }}>
+            <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxHeight: '380px', overflowY: 'auto', gridColumn: 'span 2' }}>
               <h3 style={{ color: '#2c3e50', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Live Findings Feed</h3>
               {data.map((host, idx) => (
                 <div key={idx} style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #f0f0f0' }}>

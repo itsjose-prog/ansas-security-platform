@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Download, Share2 } from 'lucide-react';
+import { FileText, Download } from 'lucide-react';
 
 const Reports = ({ history, handleDownload }) => {
   return (
