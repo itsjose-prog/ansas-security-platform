@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework', # Third party
     'rest_framework.authtoken', # For token authentication
-    'corsheaders', # Third party
     'core',  # Local
     
 ]
