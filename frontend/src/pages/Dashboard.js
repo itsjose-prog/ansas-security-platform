@@ -5,13 +5,14 @@ import {
 } from 'recharts';
 import { 
   Upload, Activity, AlertTriangle, Shield, Server, 
-  FileText, CheckCircle, Loader, Search 
+  FileText, CheckCircle, Loader, Search, Download 
 } from 'lucide-react';
 
-const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
+// Added 'handleDownload' back to the props list
+const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
   const [isHovering, setIsHovering] = useState(false);
 
-  // --- 1. DATA PROCESSING (Same logic, just safer) ---
+  // --- 1. DATA PROCESSING ---
   const getHosts = () => {
     if (!data) return [];
     if (Array.isArray(data)) return data;
@@ -48,10 +49,10 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
     });
 
     const pieData = [
-      { name: 'Critical', value: critical, color: '#ef4444' }, // Red
-      { name: 'High', value: high, color: '#f97316' },     // Orange
-      { name: 'Medium', value: medium, color: '#eab308' }, // Yellow
-      { name: 'Low', value: low, color: '#22c55e' },      // Green
+      { name: 'Critical', value: critical, color: '#ef4444' }, 
+      { name: 'High', value: high, color: '#f97316' },     
+      { name: 'Medium', value: medium, color: '#eab308' }, 
+      { name: 'Low', value: low, color: '#22c55e' },      
     ].filter(i => i.value > 0);
 
     const barData = Object.keys(portCounts).map(port => ({
@@ -59,7 +60,7 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
       count: portCounts[port]
     })).sort((a, b) => b.count - a.count).slice(0, 5);
 
-    return { pieData, barData, totalVulns: total, criticalVulns: critical };
+    return { pieData, barData, totalVulns, criticalVulns };
   };
 
   const { pieData, barData, totalVulns, criticalVulns } = processCharts();
@@ -87,13 +88,23 @@ const Dashboard = ({ file, setFile, handleUpload, loading, error, data }) => {
           </h1>
           <p style={styles.subtitle}>Automated Network Security Assessment System</p>
         </div>
-        <div style={styles.statusBadge}>
-          <Activity size={16} style={{ marginRight: 6 }} />
-          System Active
+        
+        {/* ACTION BUTTONS (PDF Download Restored) */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+            {hosts.length > 0 && (
+                <button onClick={handleDownload} style={styles.downloadBtn}>
+                    <Download size={16} style={{ marginRight: 8 }} />
+                    Export Report
+                </button>
+            )}
+            <div style={styles.statusBadge}>
+            <Activity size={16} style={{ marginRight: 6 }} />
+            System Active
+            </div>
         </div>
       </div>
 
-      {/* UPLOAD SECTION (The "Hero" Feature) */}
+      {/* UPLOAD SECTION */}
       <div style={styles.uploadSection}>
         {!loading ? (
           <div 
@@ -257,6 +268,7 @@ const styles = {
   title: { fontSize: '1.8rem', fontWeight: '800', display: 'flex', alignItems: 'center', margin: 0, color: '#0f172a' },
   subtitle: { margin: '5px 0 0 45px', color: '#64748b', fontSize: '0.9rem' },
   statusBadge: { display: 'flex', alignItems: 'center', padding: '6px 12px', background: '#dcfce7', color: '#166534', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' },
+  downloadBtn: { display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#475569' },
   
   uploadSection: { marginBottom: '50px' },
   dropZone: { border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '60px', transition: 'all 0.2s ease', minHeight: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
