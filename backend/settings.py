@@ -127,6 +127,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATIC_URL = 'static/'
 
 # CORS CONFIGURATION
+# This allows your React app to talk to Django
 CORS_ALLOW_ALL_ORIGINS = True
 
 # MEDIA FILES (Uploads)
