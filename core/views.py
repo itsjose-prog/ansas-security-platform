@@ -16,6 +16,7 @@ from bson.objectid import ObjectId
 # PDF Imports
 from django.http import HttpResponse
 from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors  # Added for professional colors
 from reportlab.pdfgen import canvas
 
 # Import your custom tools
@@ -76,7 +77,7 @@ class LoginView(APIView):
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
-# --- 2. REPORT GENERATION VIEW (Authenticated & Isolated) ---
+# --- 2. REPORT GENERATION VIEW (UPDATED FOR WHITE LABEL) ---
 
 class GenerateReportView(APIView):
     permission_classes = [IsAuthenticated]
@@ -91,72 +92,137 @@ class GenerateReportView(APIView):
         except:
              return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Generate PDF
+        # --- 1. Capture White Label Params ---
+        client_name = request.GET.get('client_name', 'Client: Internal Audit')
+        auditor_name = request.GET.get('auditor_name', 'Auditor: ANSAS Security System')
+        report_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # --- 2. Setup PDF Canvas ---
         response = HttpResponse(content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="report_{scan_id}.pdf"'
         p = canvas.Canvas(response, pagesize=letter)
         width, height = letter
 
-        # A. Header
-        p.setFont("Helvetica-Bold", 18)
-        p.drawString(50, height - 50, "ANSAS Security Audit Report")
+        # --- 3. Professional Header (Blue Box) ---
+        p.setFillColor(colors.darkblue)
+        p.rect(0, height - 100, width, 100, fill=1)
+        
+        # White Title
+        p.setFillColor(colors.white)
+        p.setFont("Helvetica-Bold", 24)
+        p.drawString(50, height - 50, "Security Audit Report")
+        
+        # Subtitle
         p.setFont("Helvetica", 12)
-        p.drawString(50, height - 80, f"Target File: {scan.get('filename', 'Unknown')}")
-        p.drawString(50, height - 100, f"Scan Date: {scan.get('upload_date', 'Unknown')}")
-        p.line(50, height - 110, 550, height - 110)
+        p.drawString(50, height - 70, "Automated Network Security Assessment System")
 
-        # B. Executive Summary
-        y = height - 150
-        p.setFont("Helvetica-Bold", 14)
+        # White Label Details (Right Side)
+        p.setFont("Helvetica-Bold", 10)
+        p.drawRightString(width - 50, height - 40, f"{client_name}")
+        p.setFont("Helvetica", 10)
+        p.drawRightString(width - 50, height - 55, f"{auditor_name}")
+        p.drawRightString(width - 50, height - 70, f"Date: {report_date}")
+
+        # --- 4. Executive Summary ---
+        y = height - 140
+        p.setFillColor(colors.black) # Reset to black text
+        p.setFont("Helvetica-Bold", 16)
         p.drawString(50, y, "Executive Summary")
-        y -= 20
-        p.setFont("Helvetica", 12)
-        p.drawString(50, y, f"Total Assets Scanned: {scan.get('asset_count', 0)}")
-        y -= 30
-
-        # C. Detailed Findings
-        p.setFont("Helvetica-Bold", 14)
-        p.drawString(50, y, "Detailed Findings")
         y -= 25
+        
+        p.setFont("Helvetica", 12)
+        p.drawString(50, y, f"Target File: {scan.get('filename', 'Unknown')}")
+        y -= 20
+        p.drawString(50, y, f"Total Assets Scanned: {scan.get('asset_count', 0)}")
+        y -= 20
+        p.drawString(50, y, "Scan Status: Complete")
+        y -= 40
+
+        # --- 5. Detailed Findings ---
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(50, y, "Detailed Findings")
+        y -= 30
         p.setFont("Helvetica", 10)
 
-        for host in scan.get('scan_data', []):
-            if y < 100: # New page if we run out of space
+        # Iterate through scan_data (List of Hosts)
+        hosts = scan.get('scan_data', [])
+        if not hosts:
+            p.drawString(50, y, "No host data found.")
+
+        for host in hosts:
+            # Check for page break
+            if y < 100: 
                 p.showPage()
                 y = height - 50
             
-            ip = host.get('ip_address', 'Unknown')
-            p.setFont("Helvetica-Bold", 11)
-            p.drawString(50, y, f"Host: {ip}")
-            y -= 15
+            ip = host.get('ip_address', 'Unknown IP')
+            os_name = host.get('os_name', 'Unknown OS')
             
-            p.setFont("Helvetica", 10)
-            for svc in host.get('services', []):
-                port = svc.get('port')
-                prod = svc.get('product')
-                vulns = svc.get('vuln_count', 0)
-                
-                # Highlight risks in red
-                if vulns > 0:
-                    text = f"  - Port {port}: {prod} [Risk: {vulns} Vulnerabilities Found]"
-                    p.setFillColorRGB(0.8, 0, 0) # Red
-                else:
-                    text = f"  - Port {port}: {prod} [Safe]"
-                    p.setFillColorRGB(0, 0, 0) # Black
-                
-                p.drawString(50, y, text)
+            # Host Header
+            p.setFont("Helvetica-Bold", 12)
+            p.setFillColor(colors.darkblue)
+            p.drawString(50, y, f"Host: {ip} ({os_name})")
+            p.setFillColor(colors.black)
+            y -= 20
+            
+            # Services
+            services = host.get('services', [])
+            if not services:
+                p.setFont("Helvetica-Oblique", 10)
+                p.drawString(70, y, "No open ports found.")
                 y -= 15
-            
-            y -= 10 # Spacing between hosts
-            p.setFillColorRGB(0, 0, 0) # Reset to black
 
-        # Finalize
+            p.setFont("Helvetica", 10)
+            for svc in services:
+                # Check for page break inside services loop
+                if y < 80:
+                    p.showPage()
+                    y = height - 50
+
+                port = svc.get('port', '?')
+                prod = svc.get('product', 'Unknown Service')
+                vulns = svc.get('vulnerabilities', [])
+                vuln_count = len(vulns)
+
+                # Service Line
+                p.setFont("Helvetica-Bold", 10)
+                p.drawString(70, y, f"• Port {port}: {prod}")
+                y -= 15
+
+                # Vulnerabilities (Red/Orange/Black)
+                if vuln_count > 0:
+                    for v in vulns:
+                        cve = v.get('id', 'No CVE')
+                        score = v.get('cvss_score', 0)
+                        
+                        # Color Coding based on Severity
+                        try:
+                            s = float(score)
+                            if s >= 9.0: p.setFillColor(colors.red)
+                            elif s >= 7.0: p.setFillColor(colors.orange)
+                            else: p.setFillColor(colors.black)
+                        except:
+                            p.setFillColor(colors.black)
+
+                        p.setFont("Helvetica", 9)
+                        p.drawString(90, y, f"- [{cve}] CVSS: {score}")
+                        y -= 15
+                        p.setFillColor(colors.black) # Reset
+                else:
+                     p.setFont("Helvetica-Oblique", 9)
+                     p.setFillColor(colors.green)
+                     p.drawString(90, y, "- Status: Secure (No CVEs found)")
+                     p.setFillColor(colors.black)
+                     y -= 15
+
+            y -= 15 # Spacing between hosts
+
         p.showPage()
         p.save()
         return response
 
 
-# --- 3. UPLOAD & HISTORY VIEW (Authenticated & Isolated) ---
+# --- 3. UPLOAD & HISTORY VIEW (Preserved Exactly) ---
 
 class NmapUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
@@ -168,8 +234,7 @@ class NmapUploadView(APIView):
         """
         try:
             current_user = request.user.username
-            print(f"DEBUG: Fetching history for user -> {current_user}") 
-
+            
             # THE PRIVACY FILTER: Only find scans belonging to this user
             cursor = scans_collection.find({"user": current_user}).sort("upload_date", -1)
             
@@ -206,7 +271,6 @@ class NmapUploadView(APIView):
              return Response(parsed_data, status=status.HTTP_400_BAD_REQUEST)
 
         # Intelligence (NVD Fetch)
-        # Securely load the key from .env
         api_key = os.getenv('NVD_API_KEY')
         fetcher = NVDFetcher(api_key=api_key)
         
