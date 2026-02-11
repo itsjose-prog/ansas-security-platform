@@ -5,20 +5,22 @@ import {
 } from 'recharts';
 import { 
   Upload, Activity, AlertTriangle, Shield, Server, 
-  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase 
+  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone 
 } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
   const [isHovering, setIsHovering] = useState(false);
   
-  // --- NEW: White-Label State ---
+  // --- UPDATED: White-Label State with New Fields ---
   const [showSettings, setShowSettings] = useState(false);
   const [reportConfig, setReportConfig] = useState({
     clientName: '',
+    clientEmail: '',
+    clientPhone: '',
     auditorName: ''
   });
 
-  // --- 1. DATA PROCESSING (PRESERVED) ---
+  // --- DATA PROCESSING (Preserved) ---
   const getHosts = () => {
     if (!data) return [];
     if (Array.isArray(data)) return data;
@@ -30,36 +32,21 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
   const hosts = getHosts();
 
   const processCharts = () => {
-    // 1. Handle empty data safely
-    if (hosts.length === 0) {
-      return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
-    }
+    if (hosts.length === 0) return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
 
-    // 2. Initialize counters
-    let critical = 0;
-    let high = 0;
-    let medium = 0;
-    let low = 0;
-    let total = 0; // Defined here
+    let critical = 0, high = 0, medium = 0, low = 0, total = 0;
     const portCounts = {};
 
-    // 3. Loop through data to count stats
     hosts.forEach(host => {
       if (host.services && Array.isArray(host.services)) {
         host.services.forEach(svc => {
-          // Count Ports for Bar Chart
           const port = svc.port;
-          if (port) {
-             portCounts[port] = (portCounts[port] || 0) + 1;
-          }
+          if (port) portCounts[port] = (portCounts[port] || 0) + 1;
           
-          // Count Vulnerabilities for Pie Chart & Total
-          if (svc.vulnerabilities && Array.isArray(svc.vulnerabilities)) {
+          if (svc.vulnerabilities) {
             svc.vulnerabilities.forEach(v => {
-              total++; // Increment total here
-              
+              total++;
               const score = parseFloat(v.cvss_score) || 0;
-              
               if (score >= 9.0) critical++;
               else if (score >= 7.0) high++;
               else if (score >= 4.0) medium++;
@@ -70,32 +57,23 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
       }
     });
 
-    // 4. Format Data for Pie Chart (Preserved Colors)
     const pieData = [
-      { name: 'Critical', value: critical, color: '#ef4444' }, // Red
-      { name: 'High', value: high, color: '#f97316' },     // Orange
-      { name: 'Medium', value: medium, color: '#eab308' }, // Yellow
-      { name: 'Low', value: low, color: '#22c55e' },      // Green
+      { name: 'Critical', value: critical, color: '#ef4444' }, 
+      { name: 'High', value: high, color: '#f97316' },     
+      { name: 'Medium', value: medium, color: '#eab308' }, 
+      { name: 'Low', value: low, color: '#22c55e' },      
     ].filter(i => i.value > 0);
 
-    // 5. Format Data for Bar Chart (Top 5 Ports)
     const barData = Object.keys(portCounts).map(port => ({
       name: `Port ${port}`,
       count: portCounts[port]
     })).sort((a, b) => b.count - a.count).slice(0, 5);
 
-    // 6. RETURN EVERYTHING
-    return { 
-      pieData, 
-      barData, 
-      totalVulns: total,  // <--- This line ensures 'total' is used!
-      criticalVulns: critical 
-    };
+    return { pieData, barData, totalVulns: total, criticalVulns: critical };
   };
 
   const { pieData, barData, totalVulns, criticalVulns } = processCharts();
 
-  // --- 2. UI HELPERS ---
   const handleDragOver = (e) => { e.preventDefault(); setIsHovering(true); };
   const handleDragLeave = () => setIsHovering(false);
   const handleDrop = (e) => {
@@ -106,15 +84,12 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
     }
   };
 
-  // --- NEW: Wrapper for Download to include Config ---
   const onDownloadClick = () => {
-    // We pass the config up to the parent App.js
     handleDownload(reportConfig);
   };
 
   return (
     <div style={styles.container}>
-      
       {/* HEADER SECTION */}
       <div style={styles.header}>
         <div>
@@ -125,9 +100,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
           <p style={styles.subtitle}>Automated Network Security Assessment System</p>
         </div>
         
-        {/* ACTION BUTTONS */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {/* NEW: Settings Toggle */}
             <button 
               onClick={() => setShowSettings(!showSettings)} 
               style={{...styles.iconBtn, backgroundColor: showSettings ? '#e2e8f0' : 'transparent'}}
@@ -149,7 +122,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       </div>
 
-      {/* NEW: REPORT CONFIGURATION PANEL */}
+      {/* NEW: EXPANDED SETTINGS PANEL */}
       {showSettings && (
         <div style={styles.configPanel}>
           <h3 style={styles.configTitle}>Report Customization (White Label)</h3>
@@ -172,6 +145,27 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                 style={styles.input}
                 value={reportConfig.auditorName}
                 onChange={(e) => setReportConfig({...reportConfig, auditorName: e.target.value})}
+              />
+            </div>
+            {/* NEW FIELDS */}
+            <div style={styles.inputGroup}>
+              <label style={styles.label}><Mail size={14} style={{marginRight: 5}}/> Client Email (Optional)</label>
+              <input 
+                type="text" 
+                placeholder="client@example.com" 
+                style={styles.input}
+                value={reportConfig.clientEmail}
+                onChange={(e) => setReportConfig({...reportConfig, clientEmail: e.target.value})}
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}><Phone size={14} style={{marginRight: 5}}/> Client Phone (Optional)</label>
+              <input 
+                type="text" 
+                placeholder="+254 700 000000" 
+                style={styles.input}
+                value={reportConfig.clientPhone}
+                onChange={(e) => setReportConfig({...reportConfig, clientPhone: e.target.value})}
               />
             </div>
           </div>
@@ -228,7 +222,6 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
             <p style={{ color: '#64748b' }}>Parsing vulnerabilities and mapping assets</p>
           </div>
         )}
-        
         {error && (
           <div style={styles.errorBanner}>
             <AlertTriangle size={20} />
@@ -240,56 +233,31 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
       {/* RESULTS DASHBOARD (PRESERVED) */}
       {hosts.length > 0 && (
         <div style={styles.dashboardGrid}>
-          
-          {/* KPI CARDS */}
           <div style={styles.statsRow}>
             <StatCard icon={Server} color="#3b82f6" label="Total Assets" value={hosts.length} />
             <StatCard icon={AlertTriangle} color="#ef4444" label="Critical Issues" value={criticalVulns} />
             <StatCard icon={Activity} color="#f59e0b" label="Total Vulns" value={totalVulns} />
             <StatCard icon={CheckCircle} color="#10b981" label="Secure Hosts" value={hosts.length - Math.min(hosts.length, criticalVulns)} />
           </div>
-
-          {/* CHARTS ROW */}
           <div style={styles.chartContainer}>
-            
-            {/* DONUT CHART WITH CENTER TEXT (PRESERVED) */}
             <div style={styles.chartCard}>
               <h3 style={styles.cardTitle}>Vulnerability Severity</h3>
               <div style={{ height: '300px', position: 'relative' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie 
-                      data={pieData} 
-                      innerRadius={60} 
-                      outerRadius={80} 
-                      paddingAngle={5} 
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
+                    <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                     </Pie>
                     <Tooltip />
                     <Legend verticalAlign="bottom" height={36}/>
                   </PieChart>
                 </ResponsiveContainer>
-                
-                {/* Center Text Overlay */}
-                <div style={{
-                  position: 'absolute', top: '42%', left: '50%', 
-                  transform: 'translate(-50%, -50%)', textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '2rem', fontWeight: '800', color: '#0f172a' }}>
-                    {totalVulns}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>
-                    Total Issues
-                  </div>
+                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '800', color: '#0f172a' }}>{totalVulns}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Total Issues</div>
                 </div>
               </div>
             </div>
-
-            {/* BAR CHART (PRESERVED) */}
             <div style={styles.chartCard}>
               <h3 style={styles.cardTitle}>Top Risky Ports</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -303,8 +271,6 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               </ResponsiveContainer>
             </div>
           </div>
-
-          {/* ASSET LIST (PRESERVED) */}
           <div style={styles.tableCard}>
             <h3 style={styles.cardTitle}>Detailed Asset Intelligence</h3>
             <div style={styles.tableWrapper}>
@@ -315,11 +281,8 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                       <div style={styles.ipBadge}>{host.ip_address}</div>
                       <span style={styles.osText}>{host.os_name || "Unknown OS"}</span>
                     </div>
-                    <div style={styles.vulnCountBadge}>
-                      {host.services ? host.services.length : 0} Services
-                    </div>
+                    <div style={styles.vulnCountBadge}>{host.services ? host.services.length : 0} Services</div>
                   </div>
-                  
                   <div style={styles.serviceGrid}>
                     {host.services && host.services.map((svc, i) => (
                       <div key={i} style={styles.serviceTag}>
@@ -333,19 +296,13 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               ))}
             </div>
           </div>
-
         </div>
       )}
-      
-      <style>{`
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .spin-animation { animation: spin 2s linear infinite; }
-      `}</style>
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } .spin-animation { animation: spin 2s linear infinite; }`}</style>
     </div>
   );
 };
 
-// --- SUB-COMPONENTS ---
 const StatCard = ({ icon: Icon, color, label, value }) => (
   <div style={styles.statCard}>
     <div style={{ ...styles.iconBox, backgroundColor: `${color}20`, color: color }}>
@@ -358,7 +315,6 @@ const StatCard = ({ icon: Icon, color, label, value }) => (
   </div>
 );
 
-// --- STYLES OBJECT ---
 const styles = {
   container: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px', fontFamily: "'Inter', sans-serif", color: '#1e293b' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' },
@@ -367,15 +323,12 @@ const styles = {
   statusBadge: { display: 'flex', alignItems: 'center', padding: '6px 12px', background: '#dcfce7', color: '#166534', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' },
   downloadBtn: { display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#475569' },
   iconBtn: { border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-
-  // New Config Panel Styles
   configPanel: { background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '30px', animation: 'fadeIn 0.3s' },
   configTitle: { fontSize: '1rem', fontWeight: '700', marginBottom: '15px', color: '#334155' },
   configGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
   inputGroup: { display: 'flex', flexDirection: 'column' },
   label: { fontSize: '0.85rem', fontWeight: '600', marginBottom: '5px', color: '#64748b', display: 'flex', alignItems: 'center' },
   input: { padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.95rem' },
-
   uploadSection: { marginBottom: '50px' },
   dropZone: { border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '60px', transition: 'all 0.2s ease', minHeight: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
   uploadIconWrapper: { background: '#fff', padding: '20px', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', marginBottom: '20px', display: 'inline-block' },
@@ -386,18 +339,15 @@ const styles = {
   analyzeBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 32px', borderRadius: '8px', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' },
   loadingState: { textAlign: 'center', padding: '40px' },
   errorBanner: { background: '#fee2e2', color: '#991b1b', padding: '16px', borderRadius: '8px', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500' },
-
   dashboardGrid: { animation: 'fadeIn 0.5s ease-in' },
   statsRow: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' },
   statCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', border: '1px solid #f1f5f9' },
   iconBox: { width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '16px' },
   statValue: { fontSize: '1.5rem', fontWeight: '800', margin: 0, lineHeight: 1 },
   statLabel: { color: '#64748b', fontSize: '0.875rem', margin: '4px 0 0 0', fontWeight: '500' },
-
   chartContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '30px' },
   chartCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
   cardTitle: { fontSize: '1.1rem', fontWeight: '700', marginBottom: '20px', color: '#0f172a' },
-
   tableCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
   tableWrapper: { maxHeight: '500px', overflowY: 'auto' },
   hostRow: { borderBottom: '1px solid #f1f5f9', padding: '16px 0' },
