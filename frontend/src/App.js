@@ -33,7 +33,6 @@ function App() {
       setHistory(response.data);
     } catch (err) {
       console.error("Failed to load history", err);
-      // If unauthorized, clear token
       if (err.response?.status === 401) {
         handleLogout();
       }
@@ -92,10 +91,10 @@ function App() {
           'Authorization': `Token ${token}` 
         },
       });
-      // Store the response data (which includes db_id) in state
-      setData(response.data);
-      // Refresh sidebar history
-      fetchHistory();
+
+      // --- CRITICAL: Ensure state is updated with the full response ---
+      setData(response.data); 
+      fetchHistory(); 
     } catch (err) {
       console.error("Upload Error:", err);
       setError("Upload failed. Please check the file format or server status.");
@@ -106,10 +105,13 @@ function App() {
 
   // --- DOWNLOAD LOGIC WITH WHITE LABEL SUPPORT ---
   const handleDownload = async (scanId, filename, config = {}) => {
+    if (!scanId) {
+      alert("Invalid Scan ID.");
+      return;
+    }
+
     try {
       const params = new URLSearchParams();
-      
-      // Map config keys to Backend expected keys
       if (config.clientName) params.append('client_name', config.clientName);
       if (config.clientEmail) params.append('client_email', config.clientEmail);
       if (config.clientPhone) params.append('client_phone', config.clientPhone);
@@ -120,29 +122,26 @@ function App() {
         responseType: 'blob',
       });
 
-      // Create blob link and trigger download
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       
-      // Dynamic Filename
       const safeClientName = config.clientName ? config.clientName.replace(/\s+/g, '_') : 'Scan';
       link.setAttribute('download', `ANSAS_Report_${safeClientName}.pdf`);
       
       document.body.appendChild(link);
       link.click();
       
-      // Cleanup
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Download Error", err);
-      alert("Failed to download report. The session may have expired or the report is missing.");
+      alert("Failed to download report. The session may have expired.");
     }
   };
 
-  // --- RENDER: LOGIN/REGISTER SCREEN ---
+  // --- RENDER ---
   if (!token) {
     return (
       <div style={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", background: "#f1f5f9", fontFamily: "'Inter', sans-serif" }}>
@@ -164,7 +163,6 @@ function App() {
     );
   }
 
-  // --- RENDER: MAIN DASHBOARD ---
   return (
     <Router>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
@@ -180,8 +178,9 @@ function App() {
                         setFile={setFile} 
                         handleUpload={handleUpload} 
                         handleDownload={(config) => {
-                            // Detect the ID from the last upload response
+                            // Robust ID checking
                             const scanId = data?.db_id || data?.id || data?._id;
+                            console.log("Attempting download with ID:", scanId); // Debugging
                             
                             if (scanId) {
                                 handleDownload(scanId, "current_scan", config);
