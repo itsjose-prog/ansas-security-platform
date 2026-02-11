@@ -10,9 +10,9 @@ import {
 
 const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
   const [isHovering, setIsHovering] = useState(false);
-  
-  // --- UPDATED: White-Label State with New Fields ---
   const [showSettings, setShowSettings] = useState(false);
+  
+  // --- White-Label State ---
   const [reportConfig, setReportConfig] = useState({
     clientName: '',
     clientEmail: '',
@@ -20,17 +20,18 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
     auditorName: ''
   });
 
-  // --- DATA PROCESSING (Preserved) ---
+  // --- Data Normalization ---
   const getHosts = () => {
     if (!data) return [];
     if (Array.isArray(data)) return data;
-    if (data.results && Array.isArray(data.results)) return data.results;
     if (data.scan_data && Array.isArray(data.scan_data)) return data.scan_data;
+    if (data.results && Array.isArray(data.results)) return data.results;
     return [];
   };
 
   const hosts = getHosts();
 
+  // --- Chart Data Processing ---
   const processCharts = () => {
     if (hosts.length === 0) return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
 
@@ -64,16 +65,17 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
       { name: 'Low', value: low, color: '#22c55e' },      
     ].filter(i => i.value > 0);
 
-    const barData = Object.keys(portCounts).map(port => ({
-      name: `Port ${port}`,
-      count: portCounts[port]
-    })).sort((a, b) => b.count - a.count).slice(0, 5);
+    const barData = Object.keys(portCounts)
+      .map(port => ({ name: `Port ${port}`, count: portCounts[port] }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     return { pieData, barData, totalVulns: total, criticalVulns: critical };
   };
 
   const { pieData, barData, totalVulns, criticalVulns } = processCharts();
 
+  // --- Event Handlers ---
   const handleDragOver = (e) => { e.preventDefault(); setIsHovering(true); };
   const handleDragLeave = () => setIsHovering(false);
   const handleDrop = (e) => {
@@ -122,7 +124,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       </div>
 
-      {/* NEW: EXPANDED SETTINGS PANEL */}
+      {/* WHITE-LABEL SETTINGS PANEL */}
       {showSettings && (
         <div style={styles.configPanel}>
           <h3 style={styles.configTitle}>Report Customization (White Label)</h3>
@@ -141,17 +143,16 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               <label style={styles.label}><Briefcase size={14} style={{marginRight: 5}}/> Auditor / Company</label>
               <input 
                 type="text" 
-                placeholder="e.g. CyberSecure Kenya" 
+                placeholder="e.g. Ombati Josephat" 
                 style={styles.input}
                 value={reportConfig.auditorName}
                 onChange={(e) => setReportConfig({...reportConfig, auditorName: e.target.value})}
               />
             </div>
-            {/* NEW FIELDS */}
             <div style={styles.inputGroup}>
-              <label style={styles.label}><Mail size={14} style={{marginRight: 5}}/> Client Email (Optional)</label>
+              <label style={styles.label}><Mail size={14} style={{marginRight: 5}}/> Client Email</label>
               <input 
-                type="text" 
+                type="email" 
                 placeholder="client@example.com" 
                 style={styles.input}
                 value={reportConfig.clientEmail}
@@ -159,10 +160,10 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               />
             </div>
             <div style={styles.inputGroup}>
-              <label style={styles.label}><Phone size={14} style={{marginRight: 5}}/> Client Phone (Optional)</label>
+              <label style={styles.label}><Phone size={14} style={{marginRight: 5}}/> Client Phone</label>
               <input 
                 type="text" 
-                placeholder="+254 700 000000" 
+                placeholder="+254..." 
                 style={styles.input}
                 value={reportConfig.clientPhone}
                 onChange={(e) => setReportConfig({...reportConfig, clientPhone: e.target.value})}
@@ -172,7 +173,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       )}
 
-      {/* UPLOAD SECTION (PRESERVED) */}
+      {/* UPLOAD SECTION */}
       <div style={styles.uploadSection}>
         {!loading ? (
           <div 
@@ -202,7 +203,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                     <Search size={18} style={{ marginRight: 8 }} />
                     Run Security Audit
                   </button>
-                  <p style={{marginTop: 10, fontSize: '0.8rem', color: '#64748b', cursor: 'pointer'}} onClick={() => setFile(null)}>Change File</p>
+                  <p style={styles.changeFileLink} onClick={() => setFile(null)}>Change File</p>
                 </div>
               ) : (
                 <label htmlFor="fileInput" style={{ cursor: 'pointer' }}>
@@ -230,7 +231,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         )}
       </div>
 
-      {/* RESULTS DASHBOARD (PRESERVED) */}
+      {/* RESULTS DASHBOARD */}
       {hosts.length > 0 && (
         <div style={styles.dashboardGrid}>
           <div style={styles.statsRow}>
@@ -239,6 +240,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
             <StatCard icon={Activity} color="#f59e0b" label="Total Vulns" value={totalVulns} />
             <StatCard icon={CheckCircle} color="#10b981" label="Secure Hosts" value={hosts.length - Math.min(hosts.length, criticalVulns)} />
           </div>
+
           <div style={styles.chartContainer}>
             <div style={styles.chartCard}>
               <h3 style={styles.cardTitle}>Vulnerability Severity</h3>
@@ -252,12 +254,13 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                     <Legend verticalAlign="bottom" height={36}/>
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '2rem', fontWeight: '800', color: '#0f172a' }}>{totalVulns}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Total Issues</div>
+                <div style={styles.pieCenterText}>
+                  <div style={styles.pieTotalValue}>{totalVulns}</div>
+                  <div style={styles.pieTotalLabel}>Total Issues</div>
                 </div>
               </div>
             </div>
+
             <div style={styles.chartCard}>
               <h3 style={styles.cardTitle}>Top Risky Ports</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -271,6 +274,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               </ResponsiveContainer>
             </div>
           </div>
+
           <div style={styles.tableCard}>
             <h3 style={styles.cardTitle}>Detailed Asset Intelligence</h3>
             <div style={styles.tableWrapper}>
@@ -298,7 +302,11 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
           </div>
         </div>
       )}
-      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } .spin-animation { animation: spin 2s linear infinite; }`}</style>
+      <style>{`
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } 
+        .spin-animation { animation: spin 2s linear infinite; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 };
@@ -321,14 +329,14 @@ const styles = {
   title: { fontSize: '1.8rem', fontWeight: '800', display: 'flex', alignItems: 'center', margin: 0, color: '#0f172a' },
   subtitle: { margin: '5px 0 0 45px', color: '#64748b', fontSize: '0.9rem' },
   statusBadge: { display: 'flex', alignItems: 'center', padding: '6px 12px', background: '#dcfce7', color: '#166534', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' },
-  downloadBtn: { display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#475569' },
-  iconBtn: { border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  configPanel: { background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '30px', animation: 'fadeIn 0.3s' },
+  downloadBtn: { display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+  iconBtn: { border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color 0.2s' },
+  configPanel: { background: '#f8fafc', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '30px', animation: 'fadeIn 0.3s ease-out' },
   configTitle: { fontSize: '1rem', fontWeight: '700', marginBottom: '15px', color: '#334155' },
-  configGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
+  configGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' },
   inputGroup: { display: 'flex', flexDirection: 'column' },
   label: { fontSize: '0.85rem', fontWeight: '600', marginBottom: '5px', color: '#64748b', display: 'flex', alignItems: 'center' },
-  input: { padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.95rem' },
+  input: { padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.95rem', transition: 'border-color 0.2s' },
   uploadSection: { marginBottom: '50px' },
   dropZone: { border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '60px', transition: 'all 0.2s ease', minHeight: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
   uploadIconWrapper: { background: '#fff', padding: '20px', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', marginBottom: '20px', display: 'inline-block' },
@@ -337,6 +345,7 @@ const styles = {
   fileSelected: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
   fileName: { fontSize: '1.1rem', fontWeight: '600', margin: '15px 0' },
   analyzeBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 32px', borderRadius: '8px', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' },
+  changeFileLink: { marginTop: 10, fontSize: '0.8rem', color: '#64748b', cursor: 'pointer', textDecoration: 'underline' },
   loadingState: { textAlign: 'center', padding: '40px' },
   errorBanner: { background: '#fee2e2', color: '#991b1b', padding: '16px', borderRadius: '8px', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500' },
   dashboardGrid: { animation: 'fadeIn 0.5s ease-in' },
@@ -348,6 +357,9 @@ const styles = {
   chartContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '30px' },
   chartCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
   cardTitle: { fontSize: '1.1rem', fontWeight: '700', marginBottom: '20px', color: '#0f172a' },
+  pieCenterText: { position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' },
+  pieTotalValue: { fontSize: '2rem', fontWeight: '800', color: '#0f172a' },
+  pieTotalLabel: { fontSize: '0.8rem', color: '#64748b', fontWeight: '600' },
   tableCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
   tableWrapper: { maxHeight: '500px', overflowY: 'auto' },
   hostRow: { borderBottom: '1px solid #f1f5f9', padding: '16px 0' },
