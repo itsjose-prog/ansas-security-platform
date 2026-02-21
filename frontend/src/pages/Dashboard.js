@@ -12,7 +12,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
   const [isHovering, setIsHovering] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  // --- White-Label State ---
+  // --- 1. White-Label State (INTACT) ---
   const [reportConfig, setReportConfig] = useState({
     clientName: '',
     clientEmail: '',
@@ -20,7 +20,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
     auditorName: ''
   });
 
-  // --- Data Normalization ---
+  // --- 2. Data Normalization (INTACT) ---
   const getHosts = () => {
     if (!data) return [];
     if (Array.isArray(data)) return data;
@@ -31,7 +31,10 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   const hosts = getHosts();
 
-  // --- Chart Data Processing ---
+  // --- 3. Compliance Data (NEW & INTEGRATED) ---
+  const compliance = data?.compliance_summary || data?.compliance_findings || null;
+
+  // --- 4. Chart Data Processing (INTACT) ---
   const processCharts = () => {
     if (hosts.length === 0) return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
 
@@ -75,7 +78,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   const { pieData, barData, totalVulns, criticalVulns } = processCharts();
 
-  // --- Event Handlers ---
+  // --- 5. Event Handlers (INTACT) ---
   const handleDragOver = (e) => { e.preventDefault(); setIsHovering(true); };
   const handleDragLeave = () => setIsHovering(false);
   const handleDrop = (e) => {
@@ -170,6 +173,58 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* COMPLIANCE STATUS BANNER (NEW SECTION) */}
+      {compliance && (
+        <div style={{
+          ...styles.tableCard, 
+          borderLeft: `6px solid ${compliance.status === 'Compliant' ? '#22c55e' : '#ef4444'}`,
+          background: compliance.status === 'Compliant' ? '#f0fdf4' : '#fef2f2',
+          marginBottom: '30px',
+          animation: 'fadeIn 0.5s ease-out'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ ...styles.cardTitle, color: compliance.status === 'Compliant' ? '#166534' : '#991b1b', marginBottom: '5px' }}>
+                Kenya DPA 2019 Compliance Status
+              </h3>
+              <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>
+                Regulatory audit based on detected vulnerabilities and data encryption standards.
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ 
+                fontSize: '1.5rem', 
+                fontWeight: '900', 
+                color: compliance.status === 'Compliant' ? '#16a34a' : '#dc2626' 
+              }}>
+                {compliance.status}
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#64748b' }}>
+                RISK LEVEL: {compliance.risk_level || 'UNKNOWN'}
+              </div>
+            </div>
+          </div>
+
+          {compliance.violations && compliance.violations.length > 0 && (
+            <div style={{ marginTop: '15px', borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+              <p style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Primary Violations:</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '5px' }}>
+                {compliance.violations.slice(0, 3).map((v, i) => (
+                  <div key={i} style={{ background: '#fff', padding: '5px 10px', borderRadius: '4px', fontSize: '0.75rem', border: '1px solid #e2e8f0', color: '#1e293b' }}>
+                    <strong>{v.section}:</strong> {v.provision}
+                  </div>
+                ))}
+                {compliance.violations.length > 3 && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center' }}>
+                    + {compliance.violations.length - 3} more in PDF report
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

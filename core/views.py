@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
+from .compliance_engine import evaluate_compliance
 import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -74,21 +75,21 @@ class LoginView(APIView):
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
-# --- 2. REPORT GENERATION VIEW (WHITE LABEL OPTIMIZED) ---
+# --- 2. REPORT GENERATION VIEW (WHITE LABEL + COMPLIANCE) ---
 
 class GenerateReportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, scan_id):
         try:
-            # SECURITY CHECK: User can only access their own data
+            # SECURITY CHECK
             scan = scans_collection.find_one({"_id": ObjectId(scan_id), "user": request.user.username})
             if not scan:
                 return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception:
              return Response({"error": "Invalid ID format"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Capture White Label Params from URL
+        # 1. Capture White Label Params
         client_name = request.GET.get('client_name', '')
         client_phone = request.GET.get('client_phone', '')
         client_email = request.GET.get('client_email', '')
@@ -101,7 +102,7 @@ class GenerateReportView(APIView):
         p = canvas.Canvas(response, pagesize=letter)
         width, height = letter
 
-        # 3. Professional Header (Blue Box)
+        # 3. Header Design
         p.setFillColor(colors.darkblue)
         p.rect(0, height - 100, width, 100, fill=1)
         p.setFillColor(colors.white)
@@ -110,7 +111,7 @@ class GenerateReportView(APIView):
         p.setFont("Helvetica", 10)
         p.drawString(50, height - 70, "Automated Network Security Assessment System (ANSAS)")
 
-        # 4. White Label Info (Right Aligned in Header)
+        # 4. White Label Details (Right Aligned)
         p.setFont("Helvetica-Bold", 10)
         p.drawRightString(width - 50, height - 40, f"Client: {client_name}" if client_name else "Client: Internal Audit")
         
@@ -142,20 +143,18 @@ class GenerateReportView(APIView):
         p.drawString(50, y, f"Total Assets Scanned: {scan.get('asset_count', 0)}")
         y -= 35
 
-        # 6. Detailed Findings
+        # 6. Detailed Technical Findings
         p.setFont("Helvetica-Bold", 14)
         p.drawString(50, y, "Detailed Technical Findings")
         y -= 25
 
         for host in scan.get('scan_data', []):
-            # Check for page overflow
             if y < 120: 
                 p.showPage()
                 y = height - 50
             
             ip = host.get('ip_address', 'Unknown IP')
             os_name = host.get('os_name', 'Unknown OS')
-            
             p.setFont("Helvetica-Bold", 12)
             p.setFillColor(colors.darkblue)
             p.drawString(50, y, f"Host: {ip} ({os_name})")
@@ -200,12 +199,50 @@ class GenerateReportView(APIView):
                     else:
                         p.setFont("Helvetica-Oblique", 9)
                         p.setFillColor(colors.green)
-                        p.drawString(90, y, "- Status: Secure (No known CVEs)")
+                        p.drawString(90, y, "- Status: Secure")
                         p.setFillColor(colors.black)
                         y -= 15
-            y -= 10 # Spacing between hosts
+            y -= 10
 
+        # --- 7. NEW: COMPLIANCE AUDIT PAGE ---
         p.showPage()
+        y = height - 50
+        p.setFillColor(colors.darkred)
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(50, y, "Kenya Data Protection Act (DPA) Audit")
+        y -= 30
+        
+        # Access the structured results from the compliance engine
+        comp_summary = scan.get('compliance_findings', {})
+        findings_list = comp_summary.get('violations', [])
+        
+        if not findings_list:
+            p.setFillColor(colors.green)
+            p.setFont("Helvetica", 12)
+            p.drawString(50, y, "✅ No major DPA compliance violations detected based on current scan.")
+        else:
+            p.setFont("Helvetica-Oblique", 10)
+            p.setFillColor(colors.black)
+            p.drawString(50, y, "The following findings indicate potential non-compliance with the DPA 2019:")
+            y -= 30
+            
+            for finding in findings_list:
+                if y < 120:
+                    p.showPage()
+                    y = height - 50
+                
+                p.setFont("Helvetica-Bold", 11)
+                p.drawString(50, y, f"Violation: {finding['section']} - {finding['provision']}")
+                y -= 15
+                p.setFont("Helvetica", 10)
+                p.drawString(70, y, f"• Asset IP: {finding['ip']}")
+                y -= 12
+                p.drawString(70, y, f"• Issue: {finding['finding']}")
+                y -= 12
+                p.setFont("Helvetica-Oblique", 9)
+                p.drawString(70, y, f"• Legal Mandate: {finding['law']}")
+                y -= 25
+
         p.save()
         return response
 
@@ -232,7 +269,6 @@ class NmapUploadView(APIView):
         if not file_obj:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Ensure Media Directory exists
         upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
         if not os.path.exists(upload_dir): os.makedirs(upload_dir)
         file_path = os.path.join(upload_dir, file_obj.name)
@@ -240,11 +276,9 @@ class NmapUploadView(APIView):
         with open(file_path, 'wb+') as destination:
             for chunk in file_obj.chunks(): destination.write(chunk)
 
-        # Run XML Parser
         parsed_data = parse_nmap_xml(file_path)
         if "error" in parsed_data: return Response(parsed_data, status=status.HTTP_400_BAD_REQUEST)
 
-        # Intelligence Enrichment (NVD)
         api_key = os.getenv('NVD_API_KEY')
         fetcher = NVDFetcher(api_key=api_key)
         
@@ -260,13 +294,16 @@ class NmapUploadView(APIView):
                     service['vulnerabilities'] = []
                     service['vuln_count'] = 0
 
-        # Create Scan Record
+        # Run the real compliance check using our engine
+        compliance_summary = evaluate_compliance(parsed_data)
+
         scan_record = {
             "user": request.user.username, 
             "filename": file_obj.name,
             "upload_date": datetime.now(),
             "asset_count": len(parsed_data),
             "scan_data": parsed_data,
+            "compliance_findings": compliance_summary,
             "status": "analyzed"
         }
 
@@ -277,7 +314,8 @@ class NmapUploadView(APIView):
                 "message": "File analyzed and saved successfully",
                 "db_id": scan_id, 
                 "filename": file_obj.name,
-                "scan_data": parsed_data
+                "scan_data": parsed_data,
+                "compliance_summary": compliance_summary
             }, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"error": f"Database Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
