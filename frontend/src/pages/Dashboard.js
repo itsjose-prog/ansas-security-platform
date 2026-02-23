@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Upload, Activity, AlertTriangle, Shield, Server, 
-  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone 
+  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone, Share2
 } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
@@ -34,7 +34,10 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
   // --- 3. Compliance Data (INTACT) ---
   const compliance = data?.compliance_summary || data?.compliance_findings || null;
 
-  // --- 4. Chart Data Processing (INTACT) ---
+  // --- 4. NEW: Topology Data ---
+  const topology = data?.topology || null;
+
+  // --- 5. Chart Data Processing (INTACT) ---
   const processCharts = () => {
     if (hosts.length === 0) return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
 
@@ -78,7 +81,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   const { pieData, barData, totalVulns, criticalVulns } = processCharts();
 
-  // --- 5. Event Handlers (INTACT) ---
+  // --- 6. Event Handlers (INTACT) ---
   const handleDragOver = (e) => { e.preventDefault(); setIsHovering(true); };
   const handleDragLeave = () => setIsHovering(false);
   const handleDrop = (e) => {
@@ -95,7 +98,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   return (
     <div style={styles.container}>
-      {/* HEADER SECTION */}
+      {/* HEADER SECTION (INTACT) */}
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>
@@ -127,7 +130,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       </div>
 
-      {/* WHITE-LABEL SETTINGS PANEL */}
+      {/* WHITE-LABEL SETTINGS PANEL (INTACT) */}
       {showSettings && (
         <div style={styles.configPanel}>
           <h3 style={styles.configTitle}>Report Customization (White Label)</h3>
@@ -176,7 +179,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       )}
 
-      {/* COMPLIANCE STATUS BANNER */}
+      {/* COMPLIANCE STATUS BANNER (INTACT) */}
       {compliance && (
         <div style={{
           ...styles.tableCard, 
@@ -228,7 +231,48 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       )}
 
-      {/* UPLOAD SECTION */}
+      {/* NEW: TOPOLOGY MAP COMPONENT (INTEGRATED) */}
+      {topology && hosts.length > 0 && (
+        <div style={{...styles.tableCard, marginBottom: '30px'}}>
+           <h3 style={styles.cardTitle}>
+             <Share2 size={18} style={{ marginRight: 10, color: '#2563eb' }} />
+             Infrastructure Topology Map
+           </h3>
+           <div style={styles.topologyContainer}>
+              {/* Central Scanner Node */}
+              <div style={styles.scannerNode}>
+                <Shield size={24} color="white" />
+                <span style={styles.nodeLabel}>ANSAS Node</span>
+              </div>
+
+              {/* Orbiting Asset Nodes */}
+              {topology.nodes.filter(n => n.id !== "Scanner").map((node, i) => {
+                const angle = (i / (topology.nodes.length - 1)) * 2 * Math.PI;
+                const radius = 120; // Distance from center
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                return (
+                  <div key={node.id} style={{ 
+                    ...styles.assetNodeWrapper,
+                    transform: `translate(${x}px, ${y}px)`
+                  }}>
+                    <div style={{ 
+                      ...styles.assetNode,
+                      borderColor: node.vulns > 0 ? '#ef4444' : '#22c55e',
+                      background: node.vulns > 0 ? '#fee2e2' : '#dcfce7'
+                    }}>
+                      <Server size={20} color={node.vulns > 0 ? '#ef4444' : '#22c55e'} />
+                    </div>
+                    <span style={styles.assetNodeLabel}>{node.id}</span>
+                  </div>
+                );
+              })}
+           </div>
+        </div>
+      )}
+
+      {/* UPLOAD SECTION (INTACT) */}
       <div style={styles.uploadSection}>
         {!loading ? (
           <div 
@@ -286,7 +330,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         )}
       </div>
 
-      {/* RESULTS DASHBOARD */}
+      {/* RESULTS DASHBOARD (INTACT) */}
       {hosts.length > 0 && (
         <div style={styles.dashboardGrid}>
           <div style={styles.statsRow}>
@@ -352,7 +396,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                             {svc.vuln_count > 0 && <span style={styles.miniAlert}>⚠️ {svc.vuln_count}</span>}
                           </div>
                           
-                          {/* Remediation Display */}
+                          {/* Remediation Display (INTACT) */}
                           {svc.remediation && svc.vuln_count > 0 && (
                             <div style={styles.remediationText}>
                               <strong>Fix:</strong> {svc.remediation.action}
@@ -436,7 +480,65 @@ const styles = {
   serviceGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   serviceTag: { fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center' },
   remediationText: { fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', borderTop: '1px solid #dcfce7', paddingTop: '4px' },
-  miniAlert: { marginLeft: '6px', color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' }
+  miniAlert: { marginLeft: '6px', color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' },
+
+  // --- NEW TOPOLOGY STYLES ---
+  topologyContainer: {
+    height: '350px',
+    background: '#f8fafc',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+    border: '1px solid #e2e8f0'
+  },
+  scannerNode: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    background: '#2563eb',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    boxShadow: '0 0 20px rgba(37, 99, 235, 0.4)'
+  },
+  nodeLabel: {
+    fontSize: '0.65rem',
+    color: 'white',
+    fontWeight: '700',
+    marginTop: '4px'
+  },
+  assetNodeWrapper: {
+    position: 'absolute',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    transition: 'all 0.5s ease'
+  },
+  assetNode: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '10px',
+    border: '2px solid',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+  },
+  assetNodeLabel: {
+    fontSize: '0.7rem',
+    fontWeight: '700',
+    marginTop: '6px',
+    color: '#334155',
+    background: 'white',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+  }
 };
 
 export default Dashboard;

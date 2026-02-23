@@ -171,15 +171,32 @@ class NmapUploadView(APIView):
         parsed_data = parse_nmap_xml(file_path)
         fetcher = NVDFetcher(api_key=os.getenv('NVD_API_KEY'))
         
+        # --- NEW FEATURE: TOPOLOGY DATA GENERATION ---
+        nodes = [{"id": "Scanner", "group": 1, "label": "ANSAS Node"}]
+        links = []
+
         for host in parsed_data:
+            ip = host.get('ip_address')
+            host_vuln_count = 0
+            
             for service in host['services']:
                 prod, ver = service.get('product', 'unknown'), service.get('version', 'unknown')
                 # CVE Fetching Feature (Intact)
                 vulns = fetcher.search_cves(prod, ver) if prod != 'unknown' and ver != 'unknown' else []
                 service['vulnerabilities'] = vulns
                 service['vuln_count'] = len(vulns)
+                host_vuln_count += len(vulns)
                 # Remediation Engine Attachment (Intact)
                 service['remediation'] = get_remediation(prod)
+            
+            # Add to Topology
+            nodes.append({
+                "id": ip, 
+                "group": 2, 
+                "label": host.get('os_name', 'Host'),
+                "vulns": host_vuln_count
+            })
+            links.append({"source": "Scanner", "target": ip})
 
         # Compliance Engine Feature (Intact)
         compliance_summary = evaluate_compliance(parsed_data)
@@ -191,10 +208,16 @@ class NmapUploadView(APIView):
             "asset_count": len(parsed_data),
             "scan_data": parsed_data,
             "compliance_findings": compliance_summary,
+            "topology": {"nodes": nodes, "links": links}, # Saved for visual graph
             "status": "analyzed"
         }
         result = scans_collection.insert_one(scan_record)
-        return Response({"db_id": str(result.inserted_id), "scan_data": parsed_data, "compliance_summary": compliance_summary}, status=status.HTTP_201_CREATED)
+        return Response({
+            "db_id": str(result.inserted_id), 
+            "scan_data": parsed_data, 
+            "compliance_summary": compliance_summary,
+            "topology": {"nodes": nodes, "links": links}
+        }, status=status.HTTP_201_CREATED)
 
     def get(self, request):
         cursor = scans_collection.find({"user": request.user.username}).sort("upload_date", -1)
