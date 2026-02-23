@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Upload, Activity, AlertTriangle, Shield, Server, 
-  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone 
+  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone, Toolsize 
 } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
@@ -31,7 +31,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   const hosts = getHosts();
 
-  // --- 3. Compliance Data (NEW & INTEGRATED) ---
+  // --- 3. Compliance Data (INTACT) ---
   const compliance = data?.compliance_summary || data?.compliance_findings || null;
 
   // --- 4. Chart Data Processing (INTACT) ---
@@ -176,7 +176,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       )}
 
-      {/* COMPLIANCE STATUS BANNER (NEW SECTION) */}
+      {/* COMPLIANCE STATUS BANNER (INTACT) */}
       {compliance && (
         <div style={{
           ...styles.tableCard, 
@@ -345,9 +345,20 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                   <div style={styles.serviceGrid}>
                     {host.services && host.services.map((svc, i) => (
                       <div key={i} style={styles.serviceTag}>
-                        <span style={{fontWeight: 600, marginRight: 5}}>{svc.port}/{svc.protocol}</span>
-                        <span style={{color: '#64748b'}}>{svc.product}</span>
-                        {svc.vuln_count > 0 && <span style={styles.miniAlert}>⚠️ {svc.vuln_count}</span>}
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <span style={{fontWeight: 600, marginRight: 5}}>{svc.port}/{svc.protocol}</span>
+                            <span style={{color: '#64748b'}}>{svc.product}</span>
+                            {svc.vuln_count > 0 && <span style={styles.miniAlert}>⚠️ {svc.vuln_count}</span>}
+                          </div>
+                          
+                          {/* NEW: Remediation Logic Applied Directly to Dashboard */}
+                          {svc.remediation && svc.vuln_count > 0 && (
+                            <div style={styles.remediationText}>
+                              <strong>Fix:</strong> {svc.remediation.action}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -423,7 +434,8 @@ const styles = {
   osText: { color: '#64748b', fontSize: '0.9rem' },
   vulnCountBadge: { fontSize: '0.8rem', fontWeight: '600', color: '#64748b' },
   serviceGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
-  serviceTag: { fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center' },
+  serviceTag: { fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center' },
+  remediationText: { fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', borderTop: '1px solid #dcfce7', paddingTop: '4px' },
   miniAlert: { marginLeft: '6px', color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' }
 };
 

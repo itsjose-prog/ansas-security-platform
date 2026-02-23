@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 from .compliance_engine import evaluate_compliance
+from .remediation_engine import get_remediation
 import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -243,6 +244,34 @@ class GenerateReportView(APIView):
                 p.drawString(70, y, f"• Legal Mandate: {finding['law']}")
                 y -= 25
 
+                # --- REMEDIATION ROADMAP PAGE ---
+        p.showPage()
+        y = height - 50
+        p.setFillColor(colors.darkgreen)
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(50, y, "Technical Remediation Roadmap")
+        
+        y -= 40
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+
+        for host in scan.get('scan_data', []):
+            for svc in host.get('services', []):
+                # Only show remediation for services with issues or specific products
+                if svc.get('vuln_count', 0) > 0:
+                    if y < 100: p.showPage(); y = height - 50
+                    
+                    rem = svc.get('remediation', {})
+                    p.setFont("Helvetica-Bold", 11)
+                    p.drawString(50, y, f"Target: {host['ip_address']} - Port {svc['port']}")
+                    y -= 15
+                    p.setFont("Helvetica", 10)
+                    p.drawString(70, y, f"• Action: {rem.get('action')}")
+                    y -= 12
+                    p.setFont("Helvetica-Oblique", 9)
+                    p.drawString(70, y, f"• Steps: {rem.get('steps')}")
+                    y -= 25
+
         p.save()
         return response
 
@@ -293,6 +322,9 @@ class NmapUploadView(APIView):
                 else:
                     service['vulnerabilities'] = []
                     service['vuln_count'] = 0
+
+        # Add remediation advice based on the product name
+        service['remediation'] = get_remediation(product)
 
         # Run the real compliance check using our engine
         compliance_summary = evaluate_compliance(parsed_data)
