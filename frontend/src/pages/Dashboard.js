@@ -34,7 +34,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
   // --- 3. Compliance Data (INTACT) ---
   const compliance = data?.compliance_summary || data?.compliance_findings || null;
 
-  // --- 4. NEW: Topology Data ---
+  // --- 4. Topology Data (INTACT) ---
   const topology = data?.topology || null;
 
   // --- 5. Chart Data Processing (INTACT) ---
@@ -231,7 +231,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       )}
 
-      {/* NEW: TOPOLOGY MAP COMPONENT (INTEGRATED) */}
+      {/* TOPOLOGY MAP COMPONENT (ALIGNED & CENTERED) */}
       {topology && hosts.length > 0 && (
         <div style={{...styles.tableCard, marginBottom: '30px'}}>
            <h3 style={styles.cardTitle}>
@@ -482,14 +482,14 @@ const styles = {
   remediationText: { fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', borderTop: '1px solid #dcfce7', paddingTop: '4px' },
   miniAlert: { marginLeft: '6px', color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' },
 
-  // --- NEW TOPOLOGY STYLES ---
+  // --- TOPOLOGY ALIGNMENT FIX APPLIED ---
   topologyContainer: {
     height: '350px',
     background: '#f8fafc',
     borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex',          // Enables Flexbox
+    alignItems: 'center',      // Vertical Centering
+    justifyContent: 'center',   // Horizontal Centering
     position: 'relative',
     overflow: 'hidden',
     border: '1px solid #e2e8f0'
