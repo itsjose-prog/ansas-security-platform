@@ -277,21 +277,123 @@ class GenerateReportView(APIView):
 
 
 # --- 3. UPLOAD & HISTORY VIEW ---
+# ... (Keep all imports and connection strings exactly as they are) ...
+
+# --- 2. REPORT GENERATION VIEW (WHITE LABEL + COMPLIANCE + REMEDIATION) ---
+
+class GenerateReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, scan_id):
+        try:
+            scan = scans_collection.find_one({"_id": ObjectId(scan_id), "user": request.user.username})
+            if not scan:
+                return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+             return Response({"error": "Invalid ID format"}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_name = request.GET.get('client_name', '')
+        client_phone = request.GET.get('client_phone', '')
+        client_email = request.GET.get('client_email', '')
+        auditor_name = request.GET.get('auditor_name', '')
+        report_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="report_{scan_id}.pdf"'
+        p = canvas.Canvas(response, pagesize=letter)
+        width, height = letter
+
+        # --- PAGE 1: TECHNICAL FINDINGS ---
+        p.setFillColor(colors.darkblue)
+        p.rect(0, height - 100, width, 100, fill=1)
+        p.setFillColor(colors.white)
+        p.setFont("Helvetica-Bold", 24)
+        p.drawString(50, height - 50, "Security Audit Report")
+        p.setFont("Helvetica", 10)
+        p.drawString(50, height - 70, "Automated Network Security Assessment System (ANSAS)")
+
+        p.setFont("Helvetica-Bold", 10)
+        p.drawRightString(width - 50, height - 40, f"Client: {client_name}" if client_name else "Client: Internal Audit")
+        p.setFont("Helvetica", 9)
+        p.drawRightString(width - 50, height - 55, f"Date: {report_date}")
+
+        y = height - 140
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(50, y, "Executive Summary")
+        y -= 40
+
+        for host in scan.get('scan_data', []):
+            if y < 150: p.showPage(); y = height - 50
+            p.setFont("Helvetica-Bold", 12)
+            p.drawString(50, y, f"Host: {host.get('ip_address')} ({host.get('os_name', 'Unknown')})")
+            y -= 20
+            for svc in host.get('services', []):
+                p.setFont("Helvetica", 10)
+                p.drawString(70, y, f"• Port {svc.get('port')}: {svc.get('product')}")
+                y -= 15
+            y -= 10
+
+        # --- PAGE 2: KENYA DPA COMPLIANCE ---
+        p.showPage()
+        y = height - 50
+        p.setFillColor(colors.darkred)
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(50, y, "Kenya Data Protection Act (DPA) Audit")
+        y -= 40
+        
+        comp_summary = scan.get('compliance_findings', {})
+        findings_list = comp_summary.get('violations', [])
+        
+        if not findings_list:
+            p.setFillColor(colors.green)
+            p.setFont("Helvetica", 12)
+            p.drawString(50, y, "✅ No major DPA compliance violations detected.")
+        else:
+            p.setFillColor(colors.black)
+            for finding in findings_list:
+                if y < 100: p.showPage(); y = height - 50
+                p.setFont("Helvetica-Bold", 11)
+                p.drawString(50, y, f"Violation: {finding['section']} - {finding['provision']}")
+                y -= 15
+                p.setFont("Helvetica", 10)
+                p.drawString(70, y, f"• Issue: {finding['finding']}")
+                y -= 25
+
+        # --- PAGE 3: REMEDIATION ROADMAP ---
+        p.showPage()
+        y = height - 50
+        p.setFillColor(colors.darkgreen)
+        p.setFont("Helvetica-Bold", 18)
+        p.drawString(50, y, "Technical Remediation Roadmap")
+        y -= 40
+        p.setFillColor(colors.black)
+
+        for host in scan.get('scan_data', []):
+            for svc in host.get('services', []):
+                # We show remediation for vulnerable services OR unencrypted ones
+                if svc.get('vuln_count', 0) > 0 or svc.get('remediation'):
+                    if y < 100: p.showPage(); y = height - 50
+                    rem = svc.get('remediation', {})
+                    p.setFont("Helvetica-Bold", 11)
+                    p.drawString(50, y, f"Target: {host['ip_address']} - Port {svc['port']}")
+                    y -= 15
+                    p.setFont("Helvetica", 10)
+                    p.drawString(70, y, f"• Action: {rem.get('action', 'Patching')}")
+                    y -= 12
+                    p.setFont("Helvetica-Oblique", 9)
+                    p.drawString(70, y, f"• Steps: {rem.get('steps', 'Update software')}")
+                    y -= 30
+
+        p.save()
+        return response
+
+
+# --- 3. UPLOAD & HISTORY VIEW ---
 
 class NmapUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        try:
-            cursor = scans_collection.find({"user": request.user.username}).sort("upload_date", -1)
-            scans_list = list(cursor)
-            for scan in scans_list:
-                if '_id' in scan: scan['_id'] = str(scan['_id'])
-                if 'upload_date' in scan: scan['upload_date'] = scan['upload_date'].strftime("%Y-%m-%d %H:%M:%S")
-            return Response(scans_list, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, *args, **kwargs):
         file_obj = request.FILES.get('file')
@@ -306,15 +408,17 @@ class NmapUploadView(APIView):
             for chunk in file_obj.chunks(): destination.write(chunk)
 
         parsed_data = parse_nmap_xml(file_path)
-        if "error" in parsed_data: return Response(parsed_data, status=status.HTTP_400_BAD_REQUEST)
-
+        
         api_key = os.getenv('NVD_API_KEY')
         fetcher = NVDFetcher(api_key=api_key)
         
+        # FIXED LOOP: Processing remediation INSIDE the service loop
         for host in parsed_data:
             for service in host['services']:
                 product = service.get('product', 'unknown')
                 version = service.get('version', 'unknown')
+                
+                # 1. Fetch CVEs
                 if product != 'unknown' and version != 'unknown':
                     vulns = fetcher.search_cves(product, version)
                     service['vulnerabilities'] = vulns
@@ -323,10 +427,9 @@ class NmapUploadView(APIView):
                     service['vulnerabilities'] = []
                     service['vuln_count'] = 0
 
-        # Add remediation advice based on the product name
-        service['remediation'] = get_remediation(product)
+                # 2. Attach Remediation (CRITICAL FIX: MOVED INSIDE LOOP)
+                service['remediation'] = get_remediation(product)
 
-        # Run the real compliance check using our engine
         compliance_summary = evaluate_compliance(parsed_data)
 
         scan_record = {
@@ -339,15 +442,18 @@ class NmapUploadView(APIView):
             "status": "analyzed"
         }
 
-        try:
-            result = scans_collection.insert_one(scan_record)
-            scan_id = str(result.inserted_id)
-            return Response({
-                "message": "File analyzed and saved successfully",
-                "db_id": scan_id, 
-                "filename": file_obj.name,
-                "scan_data": parsed_data,
-                "compliance_summary": compliance_summary
-            }, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            return Response({"error": f"Database Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        result = scans_collection.insert_one(scan_record)
+        return Response({
+            "message": "File analyzed successfully",
+            "db_id": str(result.inserted_id),
+            "scan_data": parsed_data,
+            "compliance_summary": compliance_summary
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request, *args, **kwargs):
+        cursor = scans_collection.find({"user": request.user.username}).sort("upload_date", -1)
+        scans_list = list(cursor)
+        for scan in scans_list:
+            scan['_id'] = str(scan['_id'])
+            scan['upload_date'] = scan['upload_date'].strftime("%Y-%m-%d %H:%M:%S")
+        return Response(scans_list, status=status.HTTP_200_OK)
