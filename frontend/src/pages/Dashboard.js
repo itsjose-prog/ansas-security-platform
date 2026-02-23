@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Upload, Activity, AlertTriangle, Shield, Server, 
-  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone, Toolsize 
+  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone 
 } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
@@ -176,7 +176,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         </div>
       )}
 
-      {/* COMPLIANCE STATUS BANNER (INTACT) */}
+      {/* COMPLIANCE STATUS BANNER */}
       {compliance && (
         <div style={{
           ...styles.tableCard, 
@@ -352,7 +352,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                             {svc.vuln_count > 0 && <span style={styles.miniAlert}>⚠️ {svc.vuln_count}</span>}
                           </div>
                           
-                          {/* NEW: Remediation Logic Applied Directly to Dashboard */}
+                          {/* Remediation Display */}
                           {svc.remediation && svc.vuln_count > 0 && (
                             <div style={styles.remediationText}>
                               <strong>Fix:</strong> {svc.remediation.action}
