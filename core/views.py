@@ -7,165 +7,199 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
-
-# --- ANSAS Custom Engines ---
-from .compliance_engine import evaluate_compliance  # Feature: DPA Logic
-from .remediation_engine import get_remediation    # Feature: Fix Logic
-from .nmap_parser import parse_nmap_xml            # Feature: XML Parsing
-from .cve_fetcher import NVDFetcher                # Feature: NVD Intelligence
-
+from .compliance_engine import evaluate_compliance
+from .remediation_engine import get_remediation
 import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from datetime import datetime
 from bson.objectid import ObjectId
 
-# --- PDF Generation Tools ---
+# PDF Imports
 from django.http import HttpResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 
-# --- DATABASE SETUP ---
+# Import custom tools
+from .nmap_parser import parse_nmap_xml
+from .cve_fetcher import NVDFetcher
+
+# --- INITIALIZE ENVIRONMENT ---
 load_dotenv() 
-client = MongoClient(os.getenv('MONGO_URI'))
+mongo_uri = os.getenv('MONGO_URI')
+client = MongoClient(mongo_uri)
 db = client['ansas_db']
 scans_collection = db['scans']
 
-# --- 1. AUTHENTICATION VIEWS ---
-# Handles User Signup and Token Generation
+# --- 1. AUTHENTICATION VIEWS (PRESERVED) ---
 class RegisterView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [AllowAny] 
     def post(self, request):
-        username, password = request.data.get('username'), request.data.get('password')
+        username = request.data.get('username')
+        password = request.data.get('password')
+        if not username or not password:
+            return Response({"error": "Missing credentials"}, status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(username=username).exists():
-            return Response({"error": "User exists"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
         user = User.objects.create_user(username=username, password=password)
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({"token": token.key}, status=status.HTTP_201_CREATED)
+        return Response({"token": token.key, "message": "User created successfully"}, status=status.HTTP_201_CREATED)
 
-# Handles User Login
 class LoginView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [AllowAny] 
     def post(self, request):
-        user = authenticate(username=request.data.get('username'), password=request.data.get('password'))
+        username = request.data.get('username')
+        password = request.data.get('password')
+        user = authenticate(username=username, password=password)
         if user:
             token, _ = Token.objects.get_or_create(user=user)
             return Response({"token": token.key, "username": user.username})
-        return Response({"error": "Invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-# --- 2. REPORT GENERATION (Consolidated Feature Set) ---
+# --- 2. REPORT GENERATION VIEW (ALL FEATURES INTACT) ---
 class GenerateReportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, scan_id):
-        # Retrieve Scan from MongoDB
-        scan = scans_collection.find_one({"_id": ObjectId(scan_id), "user": request.user.username})
-        if not scan: return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            scan = scans_collection.find_one({"_id": ObjectId(scan_id), "user": request.user.username})
+            if not scan:
+                return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+             return Response({"error": "Invalid ID format"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Feature: White-Labeling (Capturing Client/Auditor details from URL params)
-        client_name = request.GET.get('client_name', 'Internal Audit')
-        auditor_name = request.GET.get('auditor_name', 'Ombati Josephat')
+        # White Label Feature (Intact)
+        client_name = request.GET.get('client_name', '')
+        client_phone = request.GET.get('client_phone', '')
+        client_email = request.GET.get('client_email', '')
+        auditor_name = request.GET.get('auditor_name', '')
         report_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Initialize PDF Canvas
         response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="report_{scan_id}.pdf"'
         p = canvas.Canvas(response, pagesize=letter)
         width, height = letter
 
-        # --- PAGE 1: TECHNICAL FINDINGS ---
-        # Feature: Professional Branding & Header
+        # Header Design (Intact)
         p.setFillColor(colors.darkblue); p.rect(0, height - 100, width, 100, fill=1)
         p.setFillColor(colors.white); p.setFont("Helvetica-Bold", 24)
         p.drawString(50, height - 50, "Security Audit Report")
+        
+        # White Label Right-Align Logic (Intact)
         p.setFont("Helvetica-Bold", 10)
-        p.drawRightString(width - 50, height - 50, f"Client: {client_name}")
-        p.drawRightString(width - 50, height - 65, f"Auditor: {auditor_name}")
+        p.drawRightString(width - 50, height - 40, f"Client: {client_name}" if client_name else "Client: Internal Audit")
+        p.setFont("Helvetica", 9)
+        if client_email: p.drawRightString(width - 50, height - 55, f"Email: {client_email}")
+        if auditor_name: p.drawRightString(width - 50, height - 85, f"Auditor: {auditor_name}")
+        p.drawRightString(width - 50, height - 95, f"Date: {report_date}")
 
-        # Feature: Asset Inventory Listing
+        # Page 1: Technical Findings & CVE Coloring (Intact)
         y = height - 140
         p.setFillColor(colors.black); p.setFont("Helvetica-Bold", 16)
-        p.drawString(50, y, "Vulnerability Summary"); y -= 30
-        for host in scan.get('scan_data', []):
-            if y < 150: p.showPage(); y = height - 50
-            p.setFont("Helvetica-Bold", 12); p.drawString(50, y, f"Host: {host['ip_address']}")
-            y -= 20
-            for svc in host.get('services', []):
-                p.setFont("Helvetica", 10); p.drawString(70, y, f"• Port {svc['port']}: {svc['product']}")
-                y -= 15
+        p.drawString(50, y, "Detailed Technical Findings"); y -= 35
 
-        # --- PAGE 2: KENYA DPA AUDIT ---
-        # Feature: Compliance Mapping Logic (Chained to same PDF)
+        for host in scan.get('scan_data', []):
+            if y < 120: p.showPage(); y = height - 50
+            p.setFont("Helvetica-Bold", 12); p.setFillColor(colors.darkblue)
+            p.drawString(50, y, f"Host: {host.get('ip_address')} ({host.get('os_name', 'Unknown')})")
+            p.setFillColor(colors.black); y -= 20
+            
+            for svc in host.get('services', []):
+                if y < 80: p.showPage(); y = height - 50
+                p.setFont("Helvetica-Bold", 10); p.drawString(70, y, f"• Port {svc['port']}: {svc['product']}")
+                y -= 15
+                for v in svc.get('vulnerabilities', []):
+                    score = float(v.get('cvss_score', 0))
+                    if score >= 9.0: p.setFillColor(colors.red)
+                    elif score >= 7.0: p.setFillColor(colors.orange)
+                    else: p.setFillColor(colors.black)
+                    p.setFont("Helvetica", 9)
+                    p.drawString(90, y, f"- [{v.get('id')}] CVSS: {score}"); y -= 15
+                p.setFillColor(colors.black)
+
+        # PAGE 2: KENYA DPA AUDIT (RESTORED & VERIFIED)
         p.showPage(); y = height - 50
         p.setFillColor(colors.darkred); p.setFont("Helvetica-Bold", 18)
         p.drawString(50, y, "Kenya Data Protection Act (DPA) Audit")
         y -= 40; p.setFillColor(colors.black)
+        
         violations = scan.get('compliance_findings', {}).get('violations', [])
-        if not violations: p.drawString(50, y, "✅ No violations detected.")
+        if not violations:
+            p.setFont("Helvetica", 12); p.drawString(50, y, "✅ No violations detected.")
         else:
             for v in violations:
                 if y < 100: p.showPage(); y = height - 50
                 p.setFont("Helvetica-Bold", 11); p.drawString(50, y, f"Section {v['section']}: {v['provision']}")
-                y -= 15; p.setFont("Helvetica", 10); p.drawString(70, y, f"Issue: {v['finding']}"); y -= 25
+                y -= 15; p.setFont("Helvetica", 10); p.drawString(70, y, f"IP: {v['ip']} | Issue: {v['finding']}")
+                y -= 25
 
-        # --- PAGE 3: REMEDIATION ROADMAP ---
-        # Feature: Remediation Intelligence (Chained to same PDF)
+        # PAGE 3: TECHNICAL REMEDIATION (VERIFIED)
         p.showPage(); y = height - 50
         p.setFillColor(colors.darkgreen); p.setFont("Helvetica-Bold", 18)
         p.drawString(50, y, "Technical Remediation Roadmap")
         y -= 40; p.setFillColor(colors.black)
+
         for host in scan.get('scan_data', []):
             for svc in host.get('services', []):
                 rem = svc.get('remediation')
                 if rem:
                     if y < 120: p.showPage(); y = height - 50
-                    p.setFont("Helvetica-Bold", 10); p.drawString(50, y, f"Asset: {host['ip_address']} Port: {svc['port']}")
-                    y -= 15; p.setFont("Helvetica", 9); p.drawString(70, y, f"Action: {rem['action']}")
-                    y -= 12; p.setFont("Helvetica-Oblique", 8); p.drawString(70, y, f"Steps: {rem['steps']}"); y -= 25
+                    p.setFont("Helvetica-Bold", 11); p.drawString(50, y, f"Target: {host['ip_address']} Port: {svc['port']}")
+                    y -= 15; p.setFont("Helvetica", 10); p.drawString(70, y, f"Action: {rem.get('action')}")
+                    y -= 12; p.setFont("Helvetica-Oblique", 9); p.drawString(70, y, f"Steps: {rem.get('steps')}")
+                    y -= 30
 
         p.save()
         return response
 
-# --- 3. UPLOAD & ANALYSIS VIEW ---
+# --- 3. UPLOAD & ANALYSIS VIEW (ALL FEATURES INTACT) ---
 class NmapUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         file_obj = request.FILES.get('file')
-        # ... (File Saving Logic) ...
+        if not file_obj: return Response({"error": "No file"}, status=status.HTTP_400_BAD_REQUEST)
+
         upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
         if not os.path.exists(upload_dir): os.makedirs(upload_dir)
         file_path = os.path.join(upload_dir, file_obj.name)
-        with open(file_path, 'wb+') as dest: [dest.write(chunk) for chunk in file_obj.chunks()]
+        with open(file_path, 'wb+') as dest:
+            for chunk in file_obj.chunks(): dest.write(chunk)
 
-        # Feature: Core Analysis Engine
         parsed_data = parse_nmap_xml(file_path)
         fetcher = NVDFetcher(api_key=os.getenv('NVD_API_KEY'))
         
         for host in parsed_data:
-            for svc in host['services']:
-                prod, ver = svc.get('product', 'unknown'), svc.get('version', 'unknown')
-                # Feature: NVD CVE Intelligence
-                vulns = fetcher.search_cves(prod, ver) if prod != 'unknown' else []
-                svc['vulnerabilities'], svc['vuln_count'] = vulns, len(vulns)
-                # Feature: Dynamic Remediation Attachment
-                svc['remediation'] = get_remediation(prod)
+            for service in host['services']:
+                prod, ver = service.get('product', 'unknown'), service.get('version', 'unknown')
+                # CVE Fetching Feature (Intact)
+                vulns = fetcher.search_cves(prod, ver) if prod != 'unknown' and ver != 'unknown' else []
+                service['vulnerabilities'] = vulns
+                service['vuln_count'] = len(vulns)
+                # Remediation Engine Attachment (Intact)
+                service['remediation'] = get_remediation(prod)
 
-        # Feature: Compliance Engine Trigger
-        comp_summary = evaluate_compliance(parsed_data)
-        
-        # Feature: MongoDB Record Persistence
-        res = scans_collection.insert_one({
-            "user": request.user.username, "filename": file_obj.name,
-            "upload_date": datetime.now(), "scan_data": parsed_data,
-            "compliance_findings": comp_summary
-        })
-        return Response({"db_id": str(res.inserted_id), "scan_data": parsed_data}, status=status.HTTP_201_CREATED)
+        # Compliance Engine Feature (Intact)
+        compliance_summary = evaluate_compliance(parsed_data)
+
+        scan_record = {
+            "user": request.user.username, 
+            "filename": file_obj.name,
+            "upload_date": datetime.now(),
+            "asset_count": len(parsed_data),
+            "scan_data": parsed_data,
+            "compliance_findings": compliance_summary,
+            "status": "analyzed"
+        }
+        result = scans_collection.insert_one(scan_record)
+        return Response({"db_id": str(result.inserted_id), "scan_data": parsed_data, "compliance_summary": compliance_summary}, status=status.HTTP_201_CREATED)
 
     def get(self, request):
-        # Feature: Scan History Retrieval
         cursor = scans_collection.find({"user": request.user.username}).sort("upload_date", -1)
-        scans = list(cursor)
-        for s in scans: s['_id'], s['upload_date'] = str(s['_id']), s['upload_date'].strftime("%Y-%m-%d %H:%M")
-        return Response(scans)
+        scans_list = list(cursor)
+        for s in scans_list:
+            s['_id'] = str(s['_id'])
+            s['upload_date'] = s['upload_date'].strftime("%Y-%m-%d %H:%M:%S")
+        return Response(scans_list)
