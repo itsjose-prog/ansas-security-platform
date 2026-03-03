@@ -22,11 +22,27 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   // --- NEW FEATURE: CRITICAL FINDING LOGIC ---
   const getAlertLevel = (host) => {
-    const isFirewall = host.device_identity?.toLowerCase().includes("firewall");
+    const isFirewall = host.device_identity?.toLowerCase().includes("firewall") || host.os_name?.toLowerCase().includes("pfsense");
     const isExpired = host.ssl_audit?.toLowerCase().includes("expired");
     if (isFirewall && isExpired) return "CRITICAL";
     if (isExpired) return "WARNING";
     return "STABLE";
+  };
+
+  // --- ARCHITECT LOGIC: RISK WEIGHTING (ADDED) ---
+  const calculateHostRiskScore = (host) => {
+    let score = 0;
+    host.services?.forEach(svc => {
+      // Weight 1: CVE severity
+      score += (svc.vuln_count || 0) * 5; 
+      // Weight 2: Technical "Pivots" (Manual Hack discovery)
+      if (svc.port === 635 || svc.was_pivoted) score += 15;
+    });
+    // Weight 3: Identity & Compliance penalties
+    const alert = getAlertLevel(host);
+    if (alert === "CRITICAL") score += 40;
+    if (alert === "WARNING") score += 15;
+    return score;
   };
 
   // --- 2. Data Normalization (INTACT) ---
@@ -46,19 +62,24 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
   // --- 4. Topology Data (INTACT) ---
   const topology = data?.topology || null;
 
-  // --- 5. Chart Data Processing (INTACT) ---
+  // --- 5. Chart Data Processing (UPDATED FOR WEIGHTED SCORING) ---
   const processCharts = () => {
     if (hosts.length === 0) return { pieData: [], barData: [], totalVulns: 0, criticalVulns: 0 };
 
     let critical = 0, high = 0, medium = 0, low = 0, total = 0;
-    const portCounts = {};
+    
+    // NEW: Weighted Bar Data calculation (Replacing simple port counts)
+    const barData = hosts.map(h => ({
+      name: h.ip_address.split('.').slice(-1)[0], // Last octet for clarity
+      riskLevel: calculateHostRiskScore(h),
+      fullIp: h.ip_address
+    }))
+    .sort((a, b) => b.riskLevel - a.riskLevel)
+    .slice(0, 5);
 
     hosts.forEach(host => {
       if (host.services && Array.isArray(host.services)) {
         host.services.forEach(svc => {
-          const port = svc.port;
-          if (port) portCounts[port] = (portCounts[port] || 0) + 1;
-          
           if (svc.vulnerabilities) {
             svc.vulnerabilities.forEach(v => {
               total++;
@@ -79,11 +100,6 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
       { name: 'Medium', value: medium, color: '#eab308' }, 
       { name: 'Low', value: low, color: '#22c55e' },      
     ].filter(i => i.value > 0);
-
-    const barData = Object.keys(portCounts)
-      .map(port => ({ name: `Port ${port}`, count: portCounts[port] }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
 
     return { pieData, barData, totalVulns: total, criticalVulns: critical };
   };
@@ -114,7 +130,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
           70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
           100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
-        .pulse-critical { animation: pulse-red 2s infinite; }
+        .pulse-critical { animation: pulse-red 2s infinite; border-radius: 8px; }
         .spin-animation { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
@@ -329,7 +345,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
         )}
       </div>
 
-      {/* RESULTS DASHBOARD (FIXED: REMOVED DUPLICATION) */}
+      {/* RESULTS DASHBOARD */}
       {hosts.length > 0 && (
         <div style={styles.dashboardGrid}>
           <div style={styles.statsRow}>
@@ -356,14 +372,20 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
             </div>
 
             <div style={styles.chartCard}>
-              <h3 style={styles.cardTitle}>Top Risky Ports</h3>
+              {/* UPDATED: Title changed to Priority Scoring */}
+              <h3 style={styles.cardTitle}>Host Risk Priority (Weighted)</h3>
               <ResponsiveContainer width="100%" height={300}>
+                {/* UPDATED: Now uses riskLevel logic so bars are not equal */}
                 <BarChart data={barData} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
-                  <Tooltip cursor={{fill: '#f1f5f9'}} />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                  <YAxis dataKey="name" type="category" width={40} tick={{fontSize: 12, fontWeight: '700'}} />
+                  <Tooltip cursor={{fill: '#f1f5f9'}} formatter={(val) => [`${val} Risk Points`, 'Severity']} />
+                  <Bar dataKey="riskLevel" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={20}>
+                    {barData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.riskLevel > 50 ? '#ef4444' : '#3b82f6'} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -425,6 +447,7 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
   );
 };
 
+// ... [The rest of your code, StatCard and styles object, remains exactly the same]
 const StatCard = ({ icon: Icon, color, label, value }) => (
   <div style={styles.statCard}>
     <div style={{ ...styles.iconBox, backgroundColor: `${color}20`, color: color }}>
@@ -480,7 +503,6 @@ const styles = {
   serviceTag: { fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center' },
   remediationText: { fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', borderTop: '1px solid #dcfce7', paddingTop: '4px' },
   criticalBadge: { background: '#ef4444', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800', marginLeft: '15px', display: 'flex', alignItems: 'center' },
-
   topologyContainer: {
     height: '400px',
     background: '#f8fafc',
