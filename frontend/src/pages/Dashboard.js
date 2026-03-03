@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Upload, Activity, AlertTriangle, Shield, Server, 
-  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone, Share2
+  FileText, CheckCircle, Loader, Search, Download, Settings, User, Briefcase, Mail, Phone, Share2, Lock
 } from 'lucide-react';
 
 const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error, data }) => {
@@ -19,6 +19,15 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
     clientPhone: '',
     auditorName: ''
   });
+
+  // --- NEW FEATURE: CRITICAL FINDING LOGIC ---
+  const getAlertLevel = (host) => {
+    const isFirewall = host.device_identity?.toLowerCase().includes("firewall");
+    const isExpired = host.ssl_audit?.toLowerCase().includes("expired");
+    if (isFirewall && isExpired) return "CRITICAL";
+    if (isExpired) return "WARNING";
+    return "STABLE";
+  };
 
   // --- 2. Data Normalization (INTACT) ---
   const getHosts = () => {
@@ -98,6 +107,18 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
 
   return (
     <div style={styles.container}>
+      {/* INJECTED ANIMATION STYLE */}
+      <style>{`
+        @keyframes pulse-red {
+          0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+          70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .pulse-critical { animation: pulse-red 2s infinite; }
+        .spin-animation { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+
       {/* HEADER SECTION (INTACT) */}
       <div style={styles.header}>
         <div>
@@ -210,28 +231,10 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
               </div>
             </div>
           </div>
-
-          {compliance.violations && compliance.violations.length > 0 && (
-            <div style={{ marginTop: '15px', borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
-              <p style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Primary Violations:</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '5px' }}>
-                {compliance.violations.slice(0, 3).map((v, i) => (
-                  <div key={i} style={{ background: '#fff', padding: '5px 10px', borderRadius: '4px', fontSize: '0.75rem', border: '1px solid #e2e8f0', color: '#1e293b' }}>
-                    <strong>{v.section}:</strong> {v.provision}
-                  </div>
-                ))}
-                {compliance.violations.length > 3 && (
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center' }}>
-                    + {compliance.violations.length - 3} more in PDF report
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* TOPOLOGY MAP COMPONENT (ALIGNED & CENTERED) */}
+      {/* TOPOLOGY MAP COMPONENT (CENTERED FIX) */}
       {topology && hosts.length > 0 && (
         <div style={{...styles.tableCard, marginBottom: '30px'}}>
            <h3 style={styles.cardTitle}>
@@ -239,32 +242,35 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
              Infrastructure Topology Map
            </h3>
            <div style={styles.topologyContainer}>
-              {/* Central Scanner Node */}
               <div style={styles.scannerNode}>
                 <Shield size={24} color="white" />
                 <span style={styles.nodeLabel}>ANSAS Node</span>
               </div>
 
-              {/* Orbiting Asset Nodes */}
               {topology.nodes.filter(n => n.id !== "Scanner").map((node, i) => {
                 const angle = (i / (topology.nodes.length - 1)) * 2 * Math.PI;
-                const radius = 120; // Distance from center
+                const radius = 140;
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * radius;
                 
+                const parentHost = hosts.find(h => h.ip_address === node.id);
+                const alert = parentHost ? getAlertLevel(parentHost) : "STABLE";
+
                 return (
                   <div key={node.id} style={{ 
                     ...styles.assetNodeWrapper,
                     transform: `translate(${x}px, ${y}px)`
                   }}>
-                    <div style={{ 
+                    <div className={alert === "CRITICAL" ? "pulse-critical" : ""} style={{ 
                       ...styles.assetNode,
-                      borderColor: node.vulns > 0 ? '#ef4444' : '#22c55e',
-                      background: node.vulns > 0 ? '#fee2e2' : '#dcfce7'
+                      borderColor: alert === "CRITICAL" ? '#ef4444' : (node.vulns > 0 ? '#f97316' : '#22c55e'),
+                      background: alert === "CRITICAL" ? '#ef4444' : (node.vulns > 0 ? '#fee2e2' : '#dcfce7')
                     }}>
-                      <Server size={20} color={node.vulns > 0 ? '#ef4444' : '#22c55e'} />
+                      {alert === "CRITICAL" ? <Lock size={20} color="white" /> : <Server size={20} color={node.vulns > 0 ? '#f97316' : '#22c55e'} />}
                     </div>
-                    <span style={styles.assetNodeLabel}>{node.id}</span>
+                    <span style={{...styles.assetNodeLabel, color: alert === "CRITICAL" ? '#ef4444' : '#334155'}}>
+                        {parentHost?.device_identity || node.id}
+                    </span>
                   </div>
                 );
               })}
@@ -319,18 +325,11 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
           <div style={styles.loadingState}>
             <Loader size={48} className="spin-animation" color="#2563eb" />
             <h3 style={{ marginTop: 20, color: '#1e293b' }}>Analyzing Network Topology...</h3>
-            <p style={{ color: '#64748b' }}>Parsing vulnerabilities and mapping assets</p>
-          </div>
-        )}
-        {error && (
-          <div style={styles.errorBanner}>
-            <AlertTriangle size={20} />
-            <span style={{ marginLeft: 10 }}>{error}</span>
           </div>
         )}
       </div>
 
-      {/* RESULTS DASHBOARD (INTACT) */}
+      {/* RESULTS DASHBOARD (FIXED: REMOVED DUPLICATION) */}
       {hosts.length > 0 && (
         <div style={styles.dashboardGrid}>
           <div style={styles.statsRow}>
@@ -353,10 +352,6 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                     <Legend verticalAlign="bottom" height={36}/>
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={styles.pieCenterText}>
-                  <div style={styles.pieTotalValue}>{totalVulns}</div>
-                  <div style={styles.pieTotalLabel}>Total Issues</div>
-                </div>
               </div>
             </div>
 
@@ -377,26 +372,40 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
           <div style={styles.tableCard}>
             <h3 style={styles.cardTitle}>Detailed Asset Intelligence</h3>
             <div style={styles.tableWrapper}>
-              {hosts.map((host, idx) => (
-                <div key={idx} style={styles.hostRow}>
+              {hosts.map((host, idx) => {
+                const alert = getAlertLevel(host);
+                return (
+                <div key={idx} style={{
+                    ...styles.hostRow, 
+                    borderLeft: alert === "CRITICAL" ? '4px solid #ef4444' : 'none', 
+                    paddingLeft: alert === "CRITICAL" ? '15px' : '0'
+                }}>
                   <div style={styles.hostHeader}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                       <div style={styles.ipBadge}>{host.ip_address}</div>
-                      <span style={styles.osText}>{host.os_name || "Unknown OS"}</span>
+                      <span style={styles.osText}>{host.device_identity || host.os_name || "Unknown Asset"}</span>
+                      {alert === "CRITICAL" && (
+                        <div className="pulse-critical" style={styles.criticalBadge}>
+                           <AlertTriangle size={14} style={{marginRight: 4}}/> CRITICAL: EXPOSED GATEWAY
+                        </div>
+                      )}
                     </div>
-                    <div style={styles.vulnCountBadge}>{host.services ? host.services.length : 0} Services</div>
                   </div>
+                  
+                  {/* Audit & Discovery Data */}
+                  <div style={{marginBottom: '10px', fontSize: '0.85rem', color: '#475569'}}>
+                     <strong>Audit Finding:</strong> {host.ssl_audit || "No SSL Audit Performed"} 
+                     {host.management_port && <span style={{marginLeft: 15}}><strong>Discovery:</strong> Hidden Management Port ({host.management_port})</span>}
+                  </div>
+
                   <div style={styles.serviceGrid}>
                     {host.services && host.services.map((svc, i) => (
                       <div key={i} style={styles.serviceTag}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <div>
                             <span style={{fontWeight: 600, marginRight: 5}}>{svc.port}/{svc.protocol}</span>
                             <span style={{color: '#64748b'}}>{svc.product}</span>
-                            {svc.vuln_count > 0 && <span style={styles.miniAlert}>⚠️ {svc.vuln_count}</span>}
                           </div>
-                          
-                          {/* Remediation Display (INTACT) */}
                           {svc.remediation && svc.vuln_count > 0 && (
                             <div style={styles.remediationText}>
                               <strong>Fix:</strong> {svc.remediation.action}
@@ -407,16 +416,11 @@ const Dashboard = ({ file, setFile, handleUpload, handleDownload, loading, error
                     ))}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         </div>
       )}
-      <style>{`
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } 
-        .spin-animation { animation: spin 2s linear infinite; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
     </div>
   );
 };
@@ -457,7 +461,6 @@ const styles = {
   analyzeBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 32px', borderRadius: '8px', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' },
   changeFileLink: { marginTop: 10, fontSize: '0.8rem', color: '#64748b', cursor: 'pointer', textDecoration: 'underline' },
   loadingState: { textAlign: 'center', padding: '40px' },
-  errorBanner: { background: '#fee2e2', color: '#991b1b', padding: '16px', borderRadius: '8px', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500' },
   dashboardGrid: { animation: 'fadeIn 0.5s ease-in' },
   statsRow: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' },
   statCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', border: '1px solid #f1f5f9' },
@@ -467,29 +470,24 @@ const styles = {
   chartContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '30px' },
   chartCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
   cardTitle: { fontSize: '1.1rem', fontWeight: '700', marginBottom: '20px', color: '#0f172a' },
-  pieCenterText: { position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' },
-  pieTotalValue: { fontSize: '2rem', fontWeight: '800', color: '#0f172a' },
-  pieTotalLabel: { fontSize: '0.8rem', color: '#64748b', fontWeight: '600' },
   tableCard: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' },
   tableWrapper: { maxHeight: '500px', overflowY: 'auto' },
-  hostRow: { borderBottom: '1px solid #f1f5f9', padding: '16px 0' },
+  hostRow: { borderBottom: '1px solid #f1f5f9', padding: '16px 0', transition: 'all 0.3s ease' },
   hostHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' },
   ipBadge: { fontFamily: 'monospace', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontWeight: '700', color: '#334155', marginRight: '10px' },
-  osText: { color: '#64748b', fontSize: '0.9rem' },
-  vulnCountBadge: { fontSize: '0.8rem', fontWeight: '600', color: '#64748b' },
+  osText: { color: '#64748b', fontSize: '0.9rem', fontWeight: '600' },
   serviceGrid: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   serviceTag: { fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center' },
   remediationText: { fontSize: '0.75rem', color: '#16a34a', marginTop: '4px', borderTop: '1px solid #dcfce7', paddingTop: '4px' },
-  miniAlert: { marginLeft: '6px', color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' },
+  criticalBadge: { background: '#ef4444', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800', marginLeft: '15px', display: 'flex', alignItems: 'center' },
 
-  // --- TOPOLOGY ALIGNMENT FIX APPLIED ---
   topologyContainer: {
-    height: '350px',
+    height: '400px',
     background: '#f8fafc',
     borderRadius: '12px',
-    display: 'flex',          // Enables Flexbox
-    alignItems: 'center',      // Vertical Centering
-    justifyContent: 'center',   // Horizontal Centering
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
     border: '1px solid #e2e8f0'
@@ -527,13 +525,13 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    transition: 'all 0.3s ease'
   },
   assetNodeLabel: {
     fontSize: '0.7rem',
-    fontWeight: '700',
+    fontWeight: '800',
     marginTop: '6px',
-    color: '#334155',
     background: 'white',
     padding: '2px 6px',
     borderRadius: '4px',

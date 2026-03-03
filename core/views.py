@@ -9,6 +9,10 @@ from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 from .compliance_engine import evaluate_compliance
 from .remediation_engine import get_remediation
+from django.http import JsonResponse
+from core.network_discovery import detect_and_pivot # AUTOMATED REDIRECT & HIDDEN PORT DISCOVERY
+from core.certificate_validator import check_certificate_expiry # AUTOMATED SSL CERTIFICATE AUDIT
+from core.signature_matcher import identify_device # DEVICE IDENTIFICATION & FINGERPRINTING
 import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -154,13 +158,19 @@ class GenerateReportView(APIView):
         return response
 
 # --- 3. UPLOAD & ANALYSIS VIEW (ALL FEATURES INTACT) ---
+from core.network_discovery import detect_and_pivot
+from core.certificate_validator import check_certificate_expiry
+from core.signature_matcher import identify_device  # NEW IMPORT
+# ... other existing imports (os, settings, APIView, etc.)
+
 class NmapUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         file_obj = request.FILES.get('file')
-        if not file_obj: return Response({"error": "No file"}, status=status.HTTP_400_BAD_REQUEST)
+        if not file_obj: 
+            return Response({"error": "No file"}, status=status.HTTP_400_BAD_REQUEST)
 
         upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
         if not os.path.exists(upload_dir): os.makedirs(upload_dir)
@@ -171,7 +181,6 @@ class NmapUploadView(APIView):
         parsed_data = parse_nmap_xml(file_path)
         fetcher = NVDFetcher(api_key=os.getenv('NVD_API_KEY'))
         
-        # --- NEW FEATURE: TOPOLOGY DATA GENERATION ---
         nodes = [{"id": "Scanner", "group": 1, "label": "ANSAS Node"}]
         links = []
 
@@ -179,22 +188,41 @@ class NmapUploadView(APIView):
             ip = host.get('ip_address')
             host_vuln_count = 0
             
+            # 1. REDIRECT & HIDDEN PORT DISCOVERY
+            discovered_port = detect_and_pivot(ip)
+            host['management_port'] = discovered_port
+            
+            # 2. SSL CERTIFICATE AUDIT
+            cert_status = check_certificate_expiry(ip, int(discovered_port))
+            host['ssl_audit'] = cert_status
+
+            # --- NEW FEATURE: PROFESSIONAL INFRASTRUCTURE IDENTIFICATION ---
+            # We combine SSL data and Service data to create a 'fingerprint string'
+            fingerprint_blob = f"{cert_status} {str(host['services'])}"
+            device_identity = identify_device(fingerprint_blob)
+            host['device_identity'] = device_identity # Saved to DB
+            
             for service in host['services']:
                 prod, ver = service.get('product', 'unknown'), service.get('version', 'unknown')
+                
                 # CVE Fetching Feature (Intact)
                 vulns = fetcher.search_cves(prod, ver) if prod != 'unknown' and ver != 'unknown' else []
                 service['vulnerabilities'] = vulns
                 service['vuln_count'] = len(vulns)
                 host_vuln_count += len(vulns)
+                
                 # Remediation Engine Attachment (Intact)
                 service['remediation'] = get_remediation(prod)
             
-            # Add to Topology
+            # Add to Topology with Professional Labels
             nodes.append({
                 "id": ip, 
                 "group": 2, 
-                "label": host.get('os_name', 'Host'),
-                "vulns": host_vuln_count
+                # PRO LABEL: Shows "FIREWALL: Pfsense" instead of just "Host"
+                "label": f"{device_identity} ({ip})",
+                "vulns": host_vuln_count,
+                "ssl_status": cert_status,
+                "management_port": discovered_port
             })
             links.append({"source": "Scanner", "target": ip})
 
@@ -208,9 +236,10 @@ class NmapUploadView(APIView):
             "asset_count": len(parsed_data),
             "scan_data": parsed_data,
             "compliance_findings": compliance_summary,
-            "topology": {"nodes": nodes, "links": links}, # Saved for visual graph
+            "topology": {"nodes": nodes, "links": links},
             "status": "analyzed"
         }
+        
         result = scans_collection.insert_one(scan_record)
         return Response({
             "db_id": str(result.inserted_id), 
