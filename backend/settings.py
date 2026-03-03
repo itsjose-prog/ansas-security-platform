@@ -128,7 +128,10 @@ STATIC_URL = 'static/'
 
 # CORS CONFIGURATION
 # This allows your React app to talk to Django
-CORS_ALLOW_ALL_ORIGINS = True
+#CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://ansas-security-platform.vercel.app",
+]
 
 # MEDIA FILES (Uploads)
 MEDIA_URL = '/media/'
