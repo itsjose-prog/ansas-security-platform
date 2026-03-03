@@ -147,3 +147,16 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',         # <--- Lock everything by default
     ],
 }
+
+# 1. Explicitly allow the Authorization header
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+# 2. Allow credentials if you plan to use cookies/sessions alongside tokens
+CORS_ALLOW_CREDENTIALS = True
