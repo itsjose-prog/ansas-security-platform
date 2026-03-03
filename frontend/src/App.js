@@ -11,6 +11,7 @@ import './App.css';
 
 function App() {
   // --- AUTH STATE ---
+  // Initialize directly from localStorage to handle page refreshes
   const [token, setToken] = useState(localStorage.getItem('userToken'));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -33,6 +34,7 @@ function App() {
       setHistory(response.data);
     } catch (err) {
       console.error("Failed to load history", err);
+      // If token is invalid/expired, log out to clear state
       if (err.response?.status === 401) {
         handleLogout();
       }
@@ -53,6 +55,7 @@ function App() {
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/${endpoint}`, payload);
+      // Support both DRF Token and JWT keys just in case
       const newToken = response.data.token || response.data.access; 
       
       if (newToken) {
@@ -79,6 +82,13 @@ function App() {
   const handleUpload = async () => {
     if (!file) { setError("Please select a file first."); return; }
     
+    // Explicitly grab the latest token
+    const activeToken = localStorage.getItem('userToken');
+    if (!activeToken) {
+      setError("Session expired. Please log in.");
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     setLoading(true);
@@ -88,16 +98,21 @@ function App() {
       const response = await axios.post(`${API_BASE_URL}/api/upload-scan/`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data', 
-          'Authorization': `Token ${token}` 
+          'Authorization': `Token ${activeToken}` 
         },
       });
 
       // --- CRITICAL: Ensure state is updated with the full response ---
       setData(response.data); 
-      fetchHistory(); 
+      fetchHistory(); // Refresh history list
     } catch (err) {
       console.error("Upload Error:", err);
-      setError("Upload failed. Please check the file format or server status.");
+      if (err.response?.status === 401) {
+        setError("Unauthorized: Session might have expired.");
+        handleLogout();
+      } else {
+        setError("Upload failed. Please check the file format or server status.");
+      }
     } finally {
       setLoading(false);
     }
@@ -110,6 +125,8 @@ function App() {
       return;
     }
 
+    const activeToken = localStorage.getItem('userToken');
+
     try {
       const params = new URLSearchParams();
       if (config.clientName) params.append('client_name', config.clientName);
@@ -118,7 +135,7 @@ function App() {
       if (config.auditorName) params.append('auditor_name', config.auditorName);
 
       const response = await axios.get(`${API_BASE_URL}/api/report/${scanId}/?${params.toString()}`, {
-        headers: { 'Authorization': `Token ${token}` },
+        headers: { 'Authorization': `Token ${activeToken}` },
         responseType: 'blob',
       });
 
@@ -178,9 +195,9 @@ function App() {
                         setFile={setFile} 
                         handleUpload={handleUpload} 
                         handleDownload={(config) => {
-                            // Robust ID checking
+                            // Robust ID checking to find scan database ID
                             const scanId = data?.db_id || data?.id || data?._id;
-                            console.log("Attempting download with ID:", scanId); // Debugging
+                            console.log("Attempting download with ID:", scanId);
                             
                             if (scanId) {
                                 handleDownload(scanId, "current_scan", config);
