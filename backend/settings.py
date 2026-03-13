@@ -86,12 +86,14 @@ DATABASES = {
     'default': {
         'ENGINE': 'django_mongodb_backend',
         'NAME': 'ansas_db',
-        'ENFORCE_SCHEMA': False,
         'CLIENT': {
-            'host': 'mongodb+srv://ANSAS-Admin12:<db_password>@cluster0.n2ghlrr.mongodb.net/?appName=Cluster0',
+            'host': 'mongodb+srv://ANSAS-Admin12:HU5h17MBhypQMQto@cluster0.n2ghlrr.mongodb.net/ansas_db?retryWrites=true&w=majority',
         }
     }
 }
+
+# IMPORTANT: Add this to the bottom of settings.py if not already there
+DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 
 # Password validation
