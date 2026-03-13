@@ -84,7 +84,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django_mongodb_backend',
+        'ENGINE': 'django_db_backend.MongoDB',
         'NAME': 'ansas_db',
         'ENFORCE_SCHEMA': False,
         'CLIENT': {
@@ -166,3 +166,7 @@ CORS_ALLOW_HEADERS = [
 
 # 2. Allow credentials if you plan to use cookies/sessions alongside tokens
 CORS_ALLOW_CREDENTIALS = True
+
+# use the ObjectIdAutoField as the global default for every model.
+
+DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
