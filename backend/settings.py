@@ -84,7 +84,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'djongo',
+        'ENGINE': 'django_mongodb_backend',
         'NAME': 'ansas_db',
         'ENFORCE_SCHEMA': False,
         'CLIENT': {
