@@ -14,6 +14,10 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-m78#gvy#m%*22cpmjz4
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
+# --- DATABASE CONFIGURATION ---
+# The official MongoDB backend requires ObjectIdAutoField for compatibility
+DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
+
 # Application definition
 INSTALLED_APPS = [
     'django_mongodb_backend',  # MUST BE AT THE TOP to override AutoField
@@ -60,9 +64,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-# --- DATABASE CONFIGURATION ---
-# The official MongoDB backend requires ObjectIdAutoField for compatibility
-DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 DATABASES = {
     'default': {
