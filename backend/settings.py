@@ -87,7 +87,8 @@ DATABASES = {
         'ENGINE': 'django_mongodb_backend',
         'NAME': 'ansas_db',
         'CLIENT': {
-            'host': 'mongodb+srv://ANSAS-Admin12:HU5h17MBhypQMQto@cluster0.n2ghlrr.mongodb.net/ansas_db?retryWrites=true&w=majority',
+            # This looks for a variable named MONGO_URI in Render's settings
+            'host': os.getenv('MONGO_URI'), 
         }
     }
 }
