@@ -73,21 +73,21 @@ print(f"DEBUG: The value of MONGO_URI is: {os.getenv('MONGO_URI')}")
 
 # backend/settings.py
 
-# Explicitly pull the URI
+# 1. Force the variable from the environment
 MONGO_URI = os.getenv('MONGO_URI')
 
-# --- THIS IS THE TEST ---
-if MONGO_URI is None:
-    print("!!! RENDER LOGS: MONGO_URI is NOT being picked up from the environment !!!")
+# 2. This print is for YOU to see in the Render Logs
+if MONGO_URI:
+    print(f"✅ DATABASE LOG: MONGO_URI found (starts with: {MONGO_URI[:15]}...)")
 else:
-    print(f"!!! RENDER LOGS: MONGO_URI detected (starts with: {MONGO_URI[:15]}...) !!!")
+    print("❌ DATABASE LOG: MONGO_URI is EMPTY or NOT FOUND")
 
 DATABASES = {
     'default': {
         'ENGINE': 'django_mongodb_backend',
         'NAME': 'ansas_db',
         'CLIENT': {
-            'host': MONGO_URI,
+            'host': MONGO_URI, # If this is None, the error returns to localhost
         }
     }
 }
