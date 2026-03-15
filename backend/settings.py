@@ -5,6 +5,10 @@ Revised for MongoDB Atlas Integration.
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,17 +24,17 @@ DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 # Application definition
 INSTALLED_APPS = [
-    'django_mongodb_backend',          # 1. Database Engine First
-    'apps.MongoAdminConfig',           # 2. Custom Admin
-    'apps.MongoAuthConfig',            # 3. Custom Auth (Added)
-    'apps.MongoContentTypesConfig',    # 4. Custom ContentTypes (Added)
+    'django_mongodb_backend',          # MUST be first
+    'apps.MongoAdminConfig',           # Custom Admin
+    'apps.MongoAuthConfig',            # ADD THIS: Custom Auth
+    'apps.MongoContentTypesConfig',    # ADD THIS: Custom ContentTypes
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
-    'core',                            # Your local app
+    'core',
 ]
 
 MIDDLEWARE = [
@@ -65,12 +69,21 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 
+# --- DATABASE CONFIGURATION ---
+
+# 1. Pull the URI from Render's environment
+MONGO_URI = os.getenv('MONGO_URI')
+
+# 2. This 'if' block prevents the "localhost" error you just saw
+if not MONGO_URI:
+    raise ValueError("CRITICAL ERROR: MONGO_URI is not set in Render Environment Variables!")
+
 DATABASES = {
     'default': {
         'ENGINE': 'django_mongodb_backend',
         'NAME': 'ansas_db',
         'CLIENT': {
-            'host': os.getenv('MONGO_URI'), 
+            'host': MONGO_URI,
         }
     }
 }
