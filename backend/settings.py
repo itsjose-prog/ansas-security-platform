@@ -1,6 +1,6 @@
 """
 Django settings for backend project.
-Revised for MongoDB Atlas Integration.
+Revised for SQLite Deployment on Render.
 """
 
 from pathlib import Path
@@ -16,17 +16,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-m78#gvy#m%*22cpmjz4^u_84oeh!wbx2c!^#p#k4p9!oa43=ai')
 DEBUG = True
-ALLOWED_HOSTS = ['*']
 
-# --- DATABASE CONFIGURATION ---
-# The official MongoDB backend requires ObjectIdAutoField for compatibility
-DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
+# Added specific Render domain to ALLOWED_HOSTS for security
+ALLOWED_HOSTS = ['ansas-backend.onrender.com', 'localhost', '127.0.0.1', '*']
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.admin',        # Back to standard
-    'django.contrib.auth',         # Back to standard
-    'django.contrib.contenttypes', # Back to standard
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
@@ -67,6 +65,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+# --- DATABASE CONFIGURATION ---
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -74,9 +73,8 @@ DATABASES = {
     }
 }
 
-# standard Integer ID
+# Standard Integer ID for SQLite
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -97,12 +95,16 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# Security setting for Render's HTTPS proxy
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # CORS CONFIGURATION
 CORS_ALLOWED_ORIGINS = [
     "https://ansas-security-platform.vercel.app",
+    "http://localhost:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
