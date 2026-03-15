@@ -68,6 +68,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+# Temporary Diagnostic
+print(f"DEBUG: The value of MONGO_URI is: {os.getenv('MONGO_URI')}")
 
 # --- DATABASE CONFIGURATION ---
 
