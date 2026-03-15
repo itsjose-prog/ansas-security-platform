@@ -15,7 +15,6 @@ from core.certificate_validator import check_certificate_expiry # AUTOMATED SSL 
 from core.signature_matcher import identify_device # DEVICE IDENTIFICATION & FINGERPRINTING
 import os
 from dotenv import load_dotenv
-from pymongo import MongoClient
 from datetime import datetime
 from bson.objectid import ObjectId
 
