@@ -1,34 +1,51 @@
+import os
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Django & DRF Core Imports
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
+from django.http import JsonResponse, HttpResponse
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.conf import settings
-from django.contrib.auth.models import User
-from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
-from django.http import JsonResponse, HttpResponse
-import os
-from datetime import datetime
 
-# PDF Imports
+# PDF Generation Imports
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 
-# Import custom tools (KEEPING ALL ENGINES)
-from .nmap_parser import parse_nmap_xml
-from .cve_fetcher import NVDFetcher
+# --- DATABASE & BSON SAFETY BLOCK ---
+import pymongo
+try:
+    from bson.objectid import ObjectId
+except ImportError:
+    ObjectId = None
+
+# --- CUSTOM ENGINE & TOOL IMPORTS ---
 from .compliance_engine import evaluate_compliance
 from .remediation_engine import get_remediation
+from .nmap_parser import parse_nmap_xml
+from .cve_fetcher import NVDFetcher
 from core.network_discovery import detect_and_pivot 
 from core.certificate_validator import check_certificate_expiry 
 from core.signature_matcher import identify_device 
 
-# --- IMPORT SQLITE MODELS ---
-from .models import ScanResult 
+# --- INITIALIZE ENVIRONMENT ---
+load_dotenv()
+mongo_uri = os.getenv('MONGO_URI')
 
-# --- 1. AUTHENTICATION VIEWS (PRESERVED) ---
+# Initialize MongoDB Client (Crucial Fix)
+client = pymongo.MongoClient(mongo_uri)
+db = client['ansas_db']
+scans_collection = db['scans']
+
+# --- 1. AUTHENTICATION VIEWS ---
 class RegisterView(APIView):
     permission_classes = [AllowAny] 
     def post(self, request):
@@ -53,19 +70,21 @@ class LoginView(APIView):
             return Response({"token": token.key, "username": user.username})
         return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-# --- 2. REPORT GENERATION VIEW (TRANSITIONED TO SQLITE) ---
+# --- 2. REPORT GENERATION VIEW ---
 class GenerateReportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, scan_id):
+        if ObjectId is None:
+            return Response({"error": "Server configuration error: bson missing"}, status=500)
+            
         try:
-            # Replaced scans_collection.find_one with Django ORM
-            scan_obj = ScanResult.objects.get(id=scan_id, user=request.user)
-            scan = scan_obj.scan_data_json 
-        except (ScanResult.DoesNotExist, ValueError):
-            return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
+            scan = scans_collection.find_one({"_id": ObjectId(scan_id), "user": request.user.username})
+            if not scan:
+                return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+             return Response({"error": "Invalid ID format"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # White Label Feature (Intact)
         client_name = request.GET.get('client_name', '')
         client_phone = request.GET.get('client_phone', '')
         client_email = request.GET.get('client_email', '')
@@ -77,7 +96,6 @@ class GenerateReportView(APIView):
         p = canvas.Canvas(response, pagesize=letter)
         width, height = letter
 
-        # Header Design (Intact)
         p.setFillColor(colors.darkblue); p.rect(0, height - 100, width, 100, fill=1)
         p.setFillColor(colors.white); p.setFont("Helvetica-Bold", 24)
         p.drawString(50, height - 50, "Security Audit Report")
@@ -89,7 +107,6 @@ class GenerateReportView(APIView):
         if auditor_name: p.drawRightString(width - 50, height - 85, f"Auditor: {auditor_name}")
         p.drawRightString(width - 50, height - 95, f"Date: {report_date}")
 
-        # Page 1: Technical Findings & CVE Coloring (Intact)
         y = height - 140
         p.setFillColor(colors.black); p.setFont("Helvetica-Bold", 16)
         p.drawString(50, y, "Detailed Technical Findings"); y -= 35
@@ -113,7 +130,6 @@ class GenerateReportView(APIView):
                     p.drawString(90, y, f"- [{v.get('id')}] CVSS: {score}"); y -= 15
                 p.setFillColor(colors.black)
 
-        # PAGE 2: KENYA DPA AUDIT (Intact)
         p.showPage(); y = height - 50
         p.setFillColor(colors.darkred); p.setFont("Helvetica-Bold", 18)
         p.drawString(50, y, "Kenya Data Protection Act (DPA) Audit")
@@ -129,7 +145,6 @@ class GenerateReportView(APIView):
                 y -= 15; p.setFont("Helvetica", 10); p.drawString(70, y, f"IP: {v['ip']} | Issue: {v['finding']}")
                 y -= 25
 
-        # PAGE 3: TECHNICAL REMEDIATION (Intact)
         p.showPage(); y = height - 50
         p.setFillColor(colors.darkgreen); p.setFont("Helvetica-Bold", 18)
         p.drawString(50, y, "Technical Remediation Roadmap")
@@ -142,12 +157,13 @@ class GenerateReportView(APIView):
                     if y < 120: p.showPage(); y = height - 50
                     p.setFont("Helvetica-Bold", 11); p.drawString(50, y, f"Target: {host['ip_address']} Port: {svc['port']}")
                     y -= 15; p.setFont("Helvetica", 10); p.drawString(70, y, f"Action: {rem.get('action')}")
+                    y -= 12; p.setFont("Helvetica-Oblique", 9); p.drawString(70, y, f"Steps: {rem.get('steps')}")
                     y -= 30
 
         p.save()
         return response
 
-# --- 3. UPLOAD & ANALYSIS VIEW (TRANSITIONED TO SQLITE) ---
+# --- 3. UPLOAD & ANALYSIS VIEW ---
 class NmapUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = [IsAuthenticated]
@@ -175,6 +191,7 @@ class NmapUploadView(APIView):
             
             discovered_port = detect_and_pivot(ip)
             host['management_port'] = discovered_port
+            
             cert_status = check_certificate_expiry(ip, int(discovered_port))
             host['ssl_audit'] = cert_status
 
@@ -186,45 +203,45 @@ class NmapUploadView(APIView):
                 prod, ver = service.get('product', 'unknown'), service.get('version', 'unknown')
                 vulns = fetcher.search_cves(prod, ver) if prod != 'unknown' and ver != 'unknown' else []
                 service['vulnerabilities'] = vulns
-                service['remediation'] = get_remediation(prod)
+                service['vuln_count'] = len(vulns)
                 host_vuln_count += len(vulns)
+                service['remediation'] = get_remediation(prod)
             
             nodes.append({
-                "id": ip, "group": 2, "label": f"{device_identity} ({ip})",
-                "vulns": host_vuln_count, "ssl_status": cert_status
+                "id": ip, 
+                "group": 2, 
+                "label": f"{device_identity} ({ip})",
+                "vulns": host_vuln_count,
+                "ssl_status": cert_status,
+                "management_port": discovered_port
             })
             links.append({"source": "Scanner", "target": ip})
 
         compliance_summary = evaluate_compliance(parsed_data)
 
-        # Save to SQLite using ORM
-        scan_record = ScanResult.objects.create(
-            user=request.user, 
-            filename=file_obj.name,
-            asset_count=len(parsed_data),
-            scan_data_json={
-                "scan_data": parsed_data,
-                "compliance_findings": compliance_summary,
-                "topology": {"nodes": nodes, "links": links}
-            },
-            status="analyzed"
-        )
+        scan_record = {
+            "user": request.user.username, 
+            "filename": file_obj.name,
+            "upload_date": datetime.now(),
+            "asset_count": len(parsed_data),
+            "scan_data": parsed_data,
+            "compliance_findings": compliance_summary,
+            "topology": {"nodes": nodes, "links": links},
+            "status": "analyzed"
+        }
         
+        result = scans_collection.insert_one(scan_record)
         return Response({
-            "db_id": scan_record.id, 
+            "db_id": str(result.inserted_id), 
             "scan_data": parsed_data, 
             "compliance_summary": compliance_summary,
             "topology": {"nodes": nodes, "links": links}
         }, status=status.HTTP_201_CREATED)
 
     def get(self, request):
-        scans = ScanResult.objects.filter(user=request.user).order_by('-id')
-        scans_list = []
-        for s in scans:
-            scans_list.append({
-                "id": s.id,
-                "filename": s.filename,
-                "upload_date": s.upload_date.strftime("%Y-%m-%d %H:%M:%S"),
-                "status": s.status
-            })
+        cursor = scans_collection.find({"user": request.user.username}).sort("upload_date", -1)
+        scans_list = list(cursor)
+        for s in scans_list:
+            s['_id'] = str(s['_id'])
+            s['upload_date'] = s['upload_date'].strftime("%Y-%m-%d %H:%M:%S")
         return Response(scans_list)
