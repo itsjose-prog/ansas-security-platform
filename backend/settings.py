@@ -20,17 +20,17 @@ DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 # Application definition
 INSTALLED_APPS = [
-    'django_mongodb_backend',  # MUST BE AT THE TOP to override AutoField
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
+    'django_mongodb_backend',          # 1. Database Engine First
+    'apps.MongoAdminConfig',           # 2. Custom Admin
+    'apps.MongoAuthConfig',            # 3. Custom Auth (Added)
+    'apps.MongoContentTypesConfig',    # 4. Custom ContentTypes (Added)
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
-    'core',
+    'core',                            # Your local app
 ]
 
 MIDDLEWARE = [
@@ -73,6 +73,12 @@ DATABASES = {
             'host': os.getenv('MONGO_URI'), 
         }
     }
+}
+
+MIGRATION_MODULES = {
+    'admin': 'mongo_migrations.admin',
+    'auth': 'mongo_migrations.auth',
+    'contenttypes': 'mongo_migrations.contenttypes',
 }
 
 # Password validation
