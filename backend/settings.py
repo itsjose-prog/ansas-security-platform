@@ -24,10 +24,9 @@ DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 # Application definition
 INSTALLED_APPS = [
-    'django_mongodb_backend',          # MUST be first
-    'apps.MongoAdminConfig',           # Custom Admin
-    'apps.MongoAuthConfig',            # ADD THIS: Custom Auth
-    'apps.MongoContentTypesConfig',    # ADD THIS: Custom ContentTypes
+    'django.contrib.admin',        # Back to standard
+    'django.contrib.auth',         # Back to standard
+    'django.contrib.contenttypes', # Back to standard
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
@@ -68,35 +67,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-# Temporary Diagnostic
-print(f"DEBUG: The value of MONGO_URI is: {os.getenv('MONGO_URI')}")
-
-# backend/settings.py
-
-# 1. Force the variable from the environment
-MONGO_URI = os.getenv('MONGO_URI')
-
-# 2. This print is for YOU to see in the Render Logs
-if MONGO_URI:
-    print(f"✅ DATABASE LOG: MONGO_URI found (starts with: {MONGO_URI[:15]}...)")
-else:
-    print("❌ DATABASE LOG: MONGO_URI is EMPTY or NOT FOUND")
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django_mongodb_backend',
-        'NAME': 'ansas_db',
-        'CLIENT': {
-            'host': MONGO_URI, # If this is None, the error returns to localhost
-        }
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
-MIGRATION_MODULES = {
-    'admin': 'mongo_migrations.admin',
-    'auth': 'mongo_migrations.auth',
-    'contenttypes': 'mongo_migrations.contenttypes',
-}
+# standard Integer ID
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
