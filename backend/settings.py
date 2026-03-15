@@ -71,14 +71,16 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Temporary Diagnostic
 print(f"DEBUG: The value of MONGO_URI is: {os.getenv('MONGO_URI')}")
 
-# --- DATABASE CONFIGURATION ---
+# backend/settings.py
 
-# 1. Pull the URI from Render's environment
+# Explicitly pull the URI
 MONGO_URI = os.getenv('MONGO_URI')
 
-# 2. This 'if' block prevents the "localhost" error you just saw
-if not MONGO_URI:
-    raise ValueError("CRITICAL ERROR: MONGO_URI is not set in Render Environment Variables!")
+# --- THIS IS THE TEST ---
+if MONGO_URI is None:
+    print("!!! RENDER LOGS: MONGO_URI is NOT being picked up from the environment !!!")
+else:
+    print(f"!!! RENDER LOGS: MONGO_URI detected (starts with: {MONGO_URI[:15]}...) !!!")
 
 DATABASES = {
     'default': {
