@@ -22,7 +22,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('core.urls')),  # This connects your core app
+    path('api/', include('core.urls')),  # This connects the core app
 ]
 
 # This allows us to serve uploaded files during development
